@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>にこにこおひさまクラブ シフト管理</title>
+    <meta name="description" content="にこにこおひさまクラブのシフト管理システム">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .club-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 24px 0;
+        }
+
+        @media (max-width: 600px) {
+            .club-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .club-card {
+            background: var(--bg-700);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .club-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+        }
+
+        .club-card .club-num {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .club-card .club-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .admin-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 24px;
+            padding: 14px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .admin-link:hover {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
+            transform: translateY(-2px);
+        }
+
+        .section-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .org-name {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            background: var(--bg-700);
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="landing-container">
+        <div class="landing-card" style="max-width: 480px;">
+            <div class="landing-icon">☀️</div>
+            <h1 class="landing-title">シフト管理</h1>
+            <span class="org-name">にこにこおひさまクラブ</span>
+
+            <p class="section-label">📱 クラブを選んでシフト入力</p>
+            <div class="club-grid" id="club-grid">
+                <!-- Filled by JS -->
+            </div>
+
+            <a href="/admin" class="admin-link" id="admin-link">
+                🔒 管理者ログイン
+            </a>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // Load clubs from API
+        async function loadClubs() {
+            try {
+                const res = await fetch('/api/clubs');
+                const clubs = await res.json();
+                const grid = document.getElementById('club-grid');
+
+                grid.innerHTML = clubs.map(club => `
+                    <a href="/staff/${club.id}" class="club-card">
+                        <div class="club-num">${club.id}</div>
+                        <div class="club-label">${club.name}</div>
+                    </a>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        loadClubs();
+    </script>
+</body>
+
+</html>

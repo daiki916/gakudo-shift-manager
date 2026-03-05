@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理画面 - にこにこおひさまクラブ シフト管理</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="app-container wide">
+        <!-- Header -->
+        <header class="app-header" id="app-header">
+            <div class="app-logo">
+                <span class="icon">📋</span>
+                <span>シフト管理</span>
+                <span class="org-badge" id="org-name-badge">読み込み中...</span>
+                <select id="club-filter" class="club-filter-select" onchange="onClubFilterChange(this.value)"
+                    style="margin-left: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-800); color: var(--text-primary); font-size: 0.85rem; cursor: pointer;">
+                    <option value="">全クラブ</option>
+                </select>
+            </div>
+            <nav>
+                <ul class="nav-tabs" id="nav-tabs">
+                    <li><a href="#dashboard" class="active" data-tab="dashboard" onclick="switchTab('dashboard')">📊
+                            ダッシュボード</a></li>
+                    <li><a href="#staff" data-tab="staff" onclick="switchTab('staff')">👥 スタッフ</a></li>
+                    <li><a href="#shifts" data-tab="shifts" onclick="switchTab('shifts')">📅 シフト表</a></li>
+                    <li><a href="#cost" data-tab="cost" onclick="switchTab('cost')">💰 人件費</a></li>
+                    <li><a href="#share" data-tab="share" onclick="switchTab('share')">🔗 共有</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <!-- ============ Dashboard Tab ============ -->
+        <section id="tab-dashboard" class="tab-content">
+            <div class="stats-grid" id="dashboard-stats"></div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📊 今月のサマリー</h2>
+                    <div class="month-picker">
+                        <button class="btn-nav" onclick="changeMonth(-1)">◀</button>
+                        <span class="month-display" id="current-month-display"></span>
+                        <button class="btn-nav" onclick="changeMonth(1)">▶</button>
+                    </div>
+                </div>
+                <div id="dashboard-summary"></div>
+            </div>
+        </section>
+
+        <!-- ============ Staff Tab ============ -->
+        <section id="tab-staff" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">👥 スタッフマスタ</h2>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="openAddStaffModal()">＋ スタッフ追加</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>順序</th>
+                                <th>クラブ</th>
+                                <th>名前</th>
+                                <th>区分</th>
+                                <th>時給・月給</th>
+                                <th>状態</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ Shifts Tab ============ -->
+        <section id="tab-shifts" class="tab-content" style="display:none">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📅 シフト表</h2>
+                    <div style="display:flex; align-items:center; gap: 12px; flex-wrap: wrap;">
+                        <div class="month-picker">
+                            <button class="btn-nav" onclick="changeMonth(-1)">◀</button>
+                            <span class="month-display" id="shift-month-display"></span>
+                            <button class="btn-nav" onclick="changeMonth(1)">▶</button>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-success btn-sm" onclick="applyRequests(false)">📥 希望を転記</button>
+                            <button class="btn btn-secondary btn-sm" onclick="applyRequests(true)">🔄 上書き転記</button>
+                            <button class="btn btn-secondary btn-sm" onclick="printShiftTable()"
+                                style="margin-left:4px;">🖨️ 印刷</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="shift-grid-container" id="shift-grid-wrapper">
+                    <div class="empty-state">
+                        <div class="empty-icon">📅</div>
+                        <p class="empty-text">データを読み込み中...</p>
+                    </div>
+                </div>
+                <div
+                    style="margin-top: 12px; display: flex; gap: 16px; font-size: 0.8rem; color: var(--text-secondary);">
+                    <span>🟦 確定シフト</span>
+                    <span>🟪 希望のみ（未転記）</span>
+                    <span>セルクリックで編集</span>
+                </div>
+            </div>
+
+            <!-- Shift Patterns Management -->
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header">
+                    <h2 class="card-title">🎨 シフトパターン設定</h2>
+                    <button class="btn btn-primary btn-sm" onclick="openPatternModal()">➕ パターン追加</button>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    よく使うシフト時間を登録しておくと、スタッフが入力時にワンタッチで選択できます。
+                </p>
+                <div id="pattern-list" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
+            </div>
+        </section>
+
+        <!-- ============ Cost Tab ============ -->
+        <section id="tab-cost" class="tab-content" style="display:none">
+            <div
+                style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div class="month-picker">
+                    <button class="btn-nav" onclick="changeMonth(-1)">◀</button>
+                    <span class="month-display" id="cost-month-display"></span>
+                    <button class="btn-nav" onclick="changeMonth(1)">▶</button>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="exportCSV()">📥 CSVエクスポート</button>
+            </div>
+            <div class="stats-grid" id="cost-stats"></div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">💰 スタッフ別人件費</h2>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>スタッフ名</th>
+                                <th>区分</th>
+                                <th>時給/月給</th>
+                                <th>出勤日数</th>
+                                <th>労働時間</th>
+                                <th>人件費</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cost-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ Share Tab ============ -->
+        <section id="tab-share" class="tab-content" style="display:none">
+            <!-- URL & QR Code -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 900px;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">🔗 スタッフ用URL</h2>
+                    </div>
+                    <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem;">
+                        以下のURLをスタッフに共有すると、スマホからシフト希望を入力できます。
+                    </p>
+                    <div class="share-box">
+                        <span class="url-text" id="staff-url"></span>
+                        <button class="btn btn-primary btn-sm" onclick="copyStaffUrl()">コピー</button>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <h3 class="card-title" style="margin-bottom: 12px;">📱 クラブ別URL</h3>
+                        <div id="club-url-list" style="font-size: 0.85rem; color: var(--text-secondary);">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📷 QRコード</h2>
+                    </div>
+                    <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem;">
+                        スマホで読み取るとシフト入力画面が開きます。印刷して掲示にも◎
+                    </p>
+                    <div
+                        style="text-align: center; padding: 16px; background: #fff; border-radius: 12px; display: inline-block; margin: 0 auto;">
+                        <img id="qr-code-img" alt="QRコード" style="width: 180px; height: 180px;">
+                    </div>
+                    <div style="margin-top: 12px; text-align: center;">
+                        <button class="btn btn-secondary btn-sm" onclick="printQRCode()">🖨️ QRコードを印刷</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Share Buttons -->
+            <div class="card" style="max-width: 900px; margin-top: 20px;">
+                <div class="card-header">
+                    <h2 class="card-title">📤 かんたん送信</h2>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem;">
+                    LINE WORKS やメールでスタッフに直接送信できます。
+                </p>
+
+                <div
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
+                    <button class="share-action-btn" onclick="shareViaLINEWORKS()"
+                        style="background: linear-gradient(135deg, #00C73C, #00B336); color: #fff; border: none; padding: 16px; border-radius: 12px; cursor: pointer; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s, box-shadow 0.2s;">
+                        <span style="font-size: 1.3rem;">💬</span> LINE WORKSで送信
+                    </button>
+                    <button class="share-action-btn" onclick="shareViaEmail()"
+                        style="background: linear-gradient(135deg, #4A90D9, #357ABD); color: #fff; border: none; padding: 16px; border-radius: 12px; cursor: pointer; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s, box-shadow 0.2s;">
+                        <span style="font-size: 1.3rem;">📧</span> メールで送信
+                    </button>
+                    <button class="share-action-btn" id="web-share-btn" onclick="shareViaWebAPI()"
+                        style="background: linear-gradient(135deg, #7C3AED, #6D28D9); color: #fff; border: none; padding: 16px; border-radius: 12px; cursor: pointer; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s, box-shadow 0.2s;">
+                        <span style="font-size: 1.3rem;">📱</span> その他で共有
+                    </button>
+                </div>
+
+                <!-- Message Template -->
+                <div style="margin-top: 8px;">
+                    <div
+                        style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                        <h3 class="card-title" style="margin:0;">📝 送信メッセージテンプレート</h3>
+                        <button class="btn btn-primary btn-sm" onclick="copyMessageTemplate()">📋 メッセージをコピー</button>
+                    </div>
+                    <div id="message-template"
+                        style="background: var(--bg-800); border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-size: 0.9rem; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; font-family: inherit;">
+                    </div>
+                    <p style="color: var(--text-muted); margin-top: 8px; font-size: 0.8rem;">
+                        💡 上のメッセージをコピーして、LINE WORKSのトークやメールに貼り付けてください。
+                    </p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ============ Modals ============ -->
+    <!-- Add/Edit Staff Modal -->
+    <div class="modal-overlay" id="staff-modal">
+        <div class="modal">
+            <h3 class="modal-title" id="staff-modal-title">スタッフ追加</h3>
+            <input type="hidden" id="edit-staff-id">
+            <div class="form-group">
+                <label class="form-label">所属クラブ</label>
+                <select class="form-select" id="staff-club-id"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">名前</label>
+                <input type="text" class="form-input" id="staff-name" placeholder="山田太郎">
+            </div>
+            <div class="form-group">
+                <label class="form-label">給与区分</label>
+                <select class="form-select" id="staff-pay-type" onchange="togglePayFields()">
+                    <option value="hourly">時給</option>
+                    <option value="monthly">月給</option>
+                </select>
+            </div>
+            <div class="form-group" id="hourly-field">
+                <label class="form-label">時給（円）</label>
+                <input type="number" class="form-input" id="staff-hourly-rate" placeholder="1100">
+            </div>
+            <div class="form-group" id="monthly-field" style="display:none">
+                <label class="form-label">月給（円）</label>
+                <input type="number" class="form-input" id="staff-monthly-salary" placeholder="250000">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('staff-modal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Shift Modal -->
+    <div class="modal-overlay" id="shift-modal">
+        <div class="modal">
+            <h3 class="modal-title" id="shift-modal-title">シフト編集</h3>
+            <input type="hidden" id="edit-shift-staff-id">
+            <input type="hidden" id="edit-shift-date">
+            <input type="hidden" id="edit-shift-id">
+
+            <!-- Pattern quick-select -->
+            <div class="form-group">
+                <label class="form-label">パターン選択</label>
+                <div id="shift-pattern-btns" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">出勤時刻</label>
+                    <select class="form-select" id="shift-start-time" onchange="updateShiftBreak()"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">退勤時刻</label>
+                    <select class="form-select" id="shift-end-time" onchange="updateShiftBreak()"></select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">休憩時間（分）<span id="break-auto-label"
+                        style="font-size:0.75rem; color:var(--warning-400);"></span></label>
+                <input type="number" class="form-input" id="shift-break" value="0" min="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">メモ</label>
+                <input type="text" class="form-input" id="shift-note" placeholder="">
+            </div>
+            <div id="shift-request-info" style="font-size: 0.85rem; color: var(--accent-400); margin-top: 8px;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-danger btn-sm" id="delete-shift-btn" onclick="deleteShift()"
+                    style="margin-right:auto; display:none;">削除</button>
+                <button class="btn btn-secondary" onclick="closeModal('shift-modal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveShift()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pattern Modal -->
+    <div class="modal-overlay" id="pattern-modal">
+        <div class="modal">
+            <h3 class="modal-title" id="pattern-modal-title">シフトパターン追加</h3>
+            <input type="hidden" id="edit-pattern-id">
+            <div class="form-group">
+                <label class="form-label">パターン名</label>
+                <input type="text" class="form-input" id="pattern-name" placeholder="例: 通常, 長期休み, 土曜">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">開始時刻</label>
+                    <select class="form-select" id="pattern-start"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">終了時刻</label>
+                    <select class="form-select" id="pattern-end"></select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">表示色</label>
+                <input type="color" class="form-input" id="pattern-color" value="#3B82F6"
+                    style="height:40px; padding:4px;">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('pattern-modal')">キャンセル</button>
+                <button class="btn btn-primary" onclick="savePattern()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // ============================================================
+        // Global State
+        // ============================================================
+        let currentYear, currentMonth;
+        let shiftPatterns = [];
+        let clubList = [];
+        let selectedClubId = null; // null = all clubs
+
+        // Generate 15-minute interval time options (7:00-19:00)
+        function generateTimeOptions() {
+            let opts = '<option value="">--:--</option>';
+            for (let h = 7; h <= 19; h++) {
+                for (let m = 0; m < 60; m += 15) {
+                    if (h === 19 && m > 0) break;
+                    const v = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                    opts += `<option value="${v}">${v}</option>`;
+                }
+            }
+            return opts;
+        }
+        const TIME_OPTIONS = generateTimeOptions();
+
+        // Labor law break calculator
+        function calcBreakMinutes(startTime, endTime) {
+            if (!startTime || !endTime) return 0;
+            const [sh, sm] = startTime.split(':').map(Number);
+            const [eh, em] = endTime.split(':').map(Number);
+            const total = (eh * 60 + em) - (sh * 60 + sm);
+            if (total > 480) return 60;
+            if (total > 360) return 45;
+            return 0;
+        }
+        let staffList = [];
+        let shiftData = [];
+        let requestData = [];
+        let costData = null;
+
+        // Init current month
+        const now = new Date();
+        currentYear = now.getFullYear();
+        currentMonth = now.getMonth() + 1;
+
+        // ============================================================
+        // Init
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const clubRes = await fetch('/api/clubs');
+                clubList = await clubRes.json();
+                orgName = 'にこにこおひさまクラブ';
+                document.getElementById('org-name-badge').textContent = orgName;
+                document.title = `${orgName} - シフト管理`;
+                populateClubSelects();
+            } catch {
+                console.error('Failed to load clubs');
+            }
+
+            await loadStaff();
+            updateMonthDisplays();
+            loadDashboard();
+
+            // Check hash for initial tab
+            const hash = window.location.hash.replace('#', '');
+            if (hash) switchTab(hash);
+        });
+
+        function populateClubSelects() {
+            // Header filter
+            const filter = document.getElementById('club-filter');
+            filter.innerHTML = '<option value="">全クラブ</option>' +
+                clubList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+            // Staff modal club select
+            const staffClub = document.getElementById('staff-club-id');
+            staffClub.innerHTML = clubList.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        }
+
+        function onClubFilterChange(value) {
+            selectedClubId = value ? parseInt(value) : null;
+            const activeTab = document.querySelector('.nav-tabs a.active')?.dataset.tab;
+            loadStaff();
+            if (activeTab === 'dashboard') loadDashboard();
+            if (activeTab === 'shifts') loadShiftTable();
+            if (activeTab === 'cost') loadCostSimulation();
+        }
+
+        // ============================================================
+        // Navigation
+        // ============================================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.nav-tabs a').forEach(a => a.classList.remove('active'));
+
+            const tabEl = document.getElementById(`tab-${tabName}`);
+            if (tabEl) tabEl.style.display = '';
+
+            const navLink = document.querySelector(`[data-tab="${tabName}"]`);
+            if (navLink) navLink.classList.add('active');
+
+            window.location.hash = tabName;
+
+            // Load data for tab
+            if (tabName === 'dashboard') loadDashboard();
+            if (tabName === 'staff') loadStaff();
+            if (tabName === 'shifts') loadShiftTable();
+            if (tabName === 'cost') loadCostSimulation();
+            if (tabName === 'share') initShareTab();
+        }
+
+        // ============================================================
+        // Month Picker
+        // ============================================================
+        function changeMonth(delta) {
+            currentMonth += delta;
+            if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+            if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+            updateMonthDisplays();
+
+            const activeTab = document.querySelector('.nav-tabs a.active')?.dataset.tab;
+            if (activeTab === 'shifts') loadShiftTable();
+            if (activeTab === 'cost') loadCostSimulation();
+            if (activeTab === 'dashboard') loadDashboard();
+        }
+
+        function updateMonthDisplays() {
+            const text = `${currentYear}年 ${currentMonth}月`;
+            document.querySelectorAll('.month-display').forEach(el => el.textContent = text);
+        }
+
+        // ============================================================
+        // Staff Management
+        // ============================================================
+        async function loadStaff() {
+            try {
+                const url = selectedClubId ? `/api/staff?club_id=${selectedClubId}` : '/api/staff';
+                const res = await fetch(url);
+                staffList = await res.json();
+                renderStaffTable();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderStaffTable() {
+            const tbody = document.getElementById('staff-table-body');
+            if (!staffList.length) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 40px;">
+          スタッフが登録されていません。「＋スタッフ追加」から追加してください。
+        </td></tr>`;
+                return;
+            }
+
+            const getClubName = (clubId) => {
+                const club = clubList.find(c => c.id === clubId);
+                return club ? club.name : `クラブ${clubId}`;
+            };
+
+            tbody.innerHTML = staffList.map((s, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td><span class="badge" style="background: var(--primary-900); color: var(--primary-200); font-size: 0.75rem;">${getClubName(s.club_id)}</span></td>
+          <td style="font-weight:500">${escapeHtml(s.name)}</td>
+          <td><span class="badge badge-${s.pay_type}">${s.pay_type === 'hourly' ? '時給' : '月給'}</span></td>
+          <td class="numeric">${s.pay_type === 'hourly' ? formatYen(s.hourly_rate) + '/h' : formatYen(s.monthly_salary) + '/月'}</td>
+          <td>${s.is_active ? '🟢 有効' : '⚪ 無効'}</td>
+          <td>
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" onclick="openEditStaffModal(${s.id})">✏️ 編集</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteStaff(${s.id}, '${escapeHtml(s.name)}')">🗑</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+        }
+
+        function openAddStaffModal() {
+            document.getElementById('staff-modal-title').textContent = 'スタッフ追加';
+            document.getElementById('edit-staff-id').value = '';
+            document.getElementById('staff-club-id').value = selectedClubId || 1;
+            document.getElementById('staff-name').value = '';
+            document.getElementById('staff-pay-type').value = 'hourly';
+            document.getElementById('staff-hourly-rate').value = '';
+            document.getElementById('staff-monthly-salary').value = '';
+            togglePayFields();
+            openModal('staff-modal');
+        }
+
+        function openEditStaffModal(id) {
+            const s = staffList.find(x => x.id === id);
+            if (!s) return;
+            document.getElementById('staff-modal-title').textContent = 'スタッフ編集';
+            document.getElementById('edit-staff-id').value = id;
+            document.getElementById('staff-club-id').value = s.club_id || 1;
+            document.getElementById('staff-name').value = s.name;
+            document.getElementById('staff-pay-type').value = s.pay_type;
+            document.getElementById('staff-hourly-rate').value = s.hourly_rate || '';
+            document.getElementById('staff-monthly-salary').value = s.monthly_salary || '';
+            togglePayFields();
+            openModal('staff-modal');
+        }
+
+        function togglePayFields() {
+            const type = document.getElementById('staff-pay-type').value;
+            document.getElementById('hourly-field').style.display = type === 'hourly' ? '' : 'none';
+            document.getElementById('monthly-field').style.display = type === 'monthly' ? '' : 'none';
+        }
+
+        async function saveStaff() {
+            const id = document.getElementById('edit-staff-id').value;
+            const data = {
+                name: document.getElementById('staff-name').value.trim(),
+                pay_type: document.getElementById('staff-pay-type').value,
+                hourly_rate: parseInt(document.getElementById('staff-hourly-rate').value) || 0,
+                monthly_salary: parseInt(document.getElementById('staff-monthly-salary').value) || 0,
+                club_id: parseInt(document.getElementById('staff-club-id').value) || 1,
+            };
+
+            if (!data.name) { showToast('名前を入力してください', 'error'); return; }
+
+            try {
+                const url = id ? `/api/staff/${id}` : '/api/staff';
+                const method = id ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+                });
+                if (!res.ok) throw new Error();
+                showToast(id ? 'スタッフを更新しました' : 'スタッフを追加しました', 'success');
+                closeModal('staff-modal');
+                await loadStaff();
+            } catch {
+                showToast('保存に失敗しました', 'error');
+            }
+        }
+
+        async function deleteStaff(id, name) {
+            if (!confirm(`${name}さんを削除しますか？`)) return;
+            try {
+                await fetch(`/api/staff/${id}`, { method: 'DELETE' });
+                showToast('スタッフを削除しました', 'success');
+                await loadStaff();
+            } catch {
+                showToast('削除に失敗しました', 'error');
+            }
+        }
+
+        // ============================================================
+        // Shift Table
+        // ============================================================
+        async function loadShiftTable() {
+            try {
+                const [shiftsRes, requestsRes, patternsRes] = await Promise.all([
+                    fetch(`/api/shifts?year=${currentYear}&month=${currentMonth}${selectedClubId ? '&club_id=' + selectedClubId : ''}`),
+                    fetch(`/api/shift-requests?year=${currentYear}&month=${currentMonth}${selectedClubId ? '&club_id=' + selectedClubId : ''}`),
+                    fetch('/api/shift-patterns')
+                ]);
+                shiftData = await shiftsRes.json();
+                requestData = await requestsRes.json();
+                shiftPatterns = await patternsRes.json();
+
+                // Init time selects in modals
+                document.getElementById('shift-start-time').innerHTML = TIME_OPTIONS;
+                document.getElementById('shift-end-time').innerHTML = TIME_OPTIONS;
+                document.getElementById('pattern-start').innerHTML = TIME_OPTIONS;
+                document.getElementById('pattern-end').innerHTML = TIME_OPTIONS;
+
+                if (!staffList.length) await loadStaff();
+                renderShiftGrid();
+                renderPatternList();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderShiftGrid() {
+            const wrapper = document.getElementById('shift-grid-wrapper');
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+            if (!staffList.length) {
+                wrapper.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div>
+          <p class="empty-text">先にスタッフを登録してください</p></div>`;
+                return;
+            }
+
+            const cols = daysInMonth + 1; // name col + days
+            let html = `<div class="shift-grid" style="grid-template-columns: 100px repeat(${daysInMonth}, minmax(70px, 1fr));">`;
+
+            // Header row
+            html += `<div class="header-cell" style="position:sticky;left:0;z-index:4;background:var(--bg-800);">スタッフ</div>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(currentYear, currentMonth - 1, d);
+                const dow = date.getDay();
+                const dowClass = dow === 0 ? 'sunday' : dow === 6 ? 'saturday' : '';
+                html += `<div class="header-cell ${dowClass}">${d}<br>${dayNames[dow]}</div>`;
+            }
+
+            // Staff rows
+            for (const staff of staffList) {
+                html += `<div class="name-cell">${escapeHtml(staff.name)}</div>`;
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const date = new Date(currentYear, currentMonth - 1, d);
+                    const dow = date.getDay();
+                    const dowClass = dow === 0 ? 'sunday' : dow === 6 ? 'saturday' : '';
+
+                    const shift = shiftData.find(s => s.staff_id === staff.id && s.date === dateStr);
+                    const request = requestData.find(r => r.staff_id === staff.id && r.date === dateStr);
+
+                    let cellClass = dowClass;
+                    let content = '';
+
+                    if (shift) {
+                        cellClass += ' has-shift';
+                        if (shift.start_time && shift.end_time) {
+                            content = `<div class="time-display">${shift.start_time}<br>〜${shift.end_time}</div>`;
+                        }
+                    } else if (request && request.is_available) {
+                        cellClass += ' has-request';
+                        if (request.start_time && request.end_time) {
+                            content = `<div class="time-display request">${request.start_time}<br>〜${request.end_time}</div>`;
+                        } else {
+                            content = `<div class="time-display request">○</div>`;
+                        }
+                    }
+
+                    html += `<div class="shift-cell ${cellClass}" onclick="openShiftModal(${staff.id}, '${dateStr}')" title="${staff.name} - ${dateStr}">${content}</div>`;
+                }
+            }
+
+            html += '</div>';
+            wrapper.innerHTML = html;
+        }
+
+        function printShiftTable() {
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+            if (!staffList.length) {
+                showToast('スタッフが登録されていません', 'error');
+                return;
+            }
+
+            // Build print HTML
+            let html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+            <title>シフト表 ${currentYear}年${currentMonth}月</title>
+            <style>
+                @page { size: A4 landscape; margin: 10mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif; font-size: 9px; color: #222; }
+                h1 { text-align: center; font-size: 16px; margin-bottom: 8px; }
+                .meta { text-align: center; font-size: 10px; color: #666; margin-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                th, td { border: 1px solid #999; padding: 2px 1px; text-align: center; vertical-align: middle; overflow: hidden; }
+                th { background: #e8e8e8; font-weight: 600; font-size: 8px; }
+                th.sun { background: #fde2e2; color: #c0392b; }
+                th.sat { background: #dbeafe; color: #2563eb; }
+                td.sun { background: #fff5f5; }
+                td.sat { background: #f0f7ff; }
+                td.has-shift { background: #e8f5e9; font-weight: 600; }
+                td.has-request { background: #f3e8ff; font-style: italic; }
+                .name-col { text-align: left; padding-left: 4px; font-weight: 600; white-space: nowrap; background: #f5f5f5; min-width: 60px; }
+                .time-text { font-size: 7.5px; line-height: 1.2; }
+                .break-text { font-size: 6.5px; color: #888; }
+                .total-col { background: #f0f0f0; font-weight: 600; font-size: 8px; }
+                .legend { margin-top: 8px; font-size: 9px; display: flex; gap: 16px; }
+                .legend span { display: inline-flex; align-items: center; gap: 4px; }
+                .legend .swatch { width: 12px; height: 12px; border: 1px solid #999; display: inline-block; }
+            </style></head><body>`;
+
+            html += `<h1>📅 シフト表 ─ ${currentYear}年${currentMonth}月</h1>`;
+            html += `<div class="meta">印刷日: ${new Date().toLocaleDateString('ja-JP')} | にこにこおひさまクラブ</div>`;
+
+            html += '<table><thead><tr>';
+            html += '<th style="width:60px;">スタッフ</th>';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(currentYear, currentMonth - 1, d);
+                const dow = date.getDay();
+                const cls = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';
+                html += `<th class="${cls}">${d}<br>${dayNames[dow]}</th>`;
+            }
+            html += '<th class="total-col" style="width:45px;">出勤<br>日数</th>';
+            html += '<th class="total-col" style="width:50px;">労働<br>時間</th>';
+            html += '</tr></thead><tbody>';
+
+            for (const staff of staffList) {
+                html += '<tr>';
+                html += `<td class="name-col">${escapeHtml(staff.name)}</td>`;
+                let totalDays = 0;
+                let totalMinutes = 0;
+
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const date = new Date(currentYear, currentMonth - 1, d);
+                    const dow = date.getDay();
+                    const shift = shiftData.find(s => s.staff_id === staff.id && s.date === dateStr);
+                    const request = requestData.find(r => r.staff_id === staff.id && r.date === dateStr);
+
+                    let cls = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';
+                    let content = '';
+
+                    if (shift && shift.start_time && shift.end_time) {
+                        cls += ' has-shift';
+                        const brk = shift.break_minutes || 0;
+                        content = `<div class="time-text">${shift.start_time}<br>〜${shift.end_time}</div>`;
+                        if (brk > 0) content += `<div class="break-text">休${brk}分</div>`;
+                        totalDays++;
+                        const [sh, sm] = shift.start_time.split(':').map(Number);
+                        const [eh, em] = shift.end_time.split(':').map(Number);
+                        totalMinutes += (eh * 60 + em) - (sh * 60 + sm) - brk;
+                    } else if (request && request.is_available) {
+                        cls += ' has-request';
+                        if (request.start_time && request.end_time) {
+                            content = `<div class="time-text">${request.start_time}<br>〜${request.end_time}</div>`;
+                        } else {
+                            content = '○';
+                        }
+                    }
+
+                    html += `<td class="${cls}">${content}</td>`;
+                }
+
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = totalMinutes % 60;
+                html += `<td class="total-col">${totalDays}日</td>`;
+                html += `<td class="total-col">${hours}:${String(mins).padStart(2, '0')}</td>`;
+                html += '</tr>';
+            }
+
+            html += '</tbody></table>';
+
+            html += `<div class="legend">
+                <span><span class="swatch" style="background:#e8f5e9;"></span> 確定シフト</span>
+                <span><span class="swatch" style="background:#f3e8ff;"></span> 希望（未転記）</span>
+                <span><span class="swatch" style="background:#fde2e2;"></span> 日曜</span>
+                <span><span class="swatch" style="background:#dbeafe;"></span> 土曜</span>
+            </div>`;
+
+            html += '<script>window.onload = () => { window.print(); }</' + 'script>';
+            html += '</body></html>';
+
+            const win = window.open('', '_blank');
+            win.document.write(html);
+            win.document.close();
+        }
+
+        function openShiftModal(staffId, dateStr) {
+            const staff = staffList.find(s => s.id === staffId);
+            const shift = shiftData.find(s => s.staff_id === staffId && s.date === dateStr);
+            const request = requestData.find(r => r.staff_id === staffId && r.date === dateStr);
+
+            document.getElementById('shift-modal-title').textContent = `${staff?.name || ''} - ${dateStr}`;
+            document.getElementById('edit-shift-staff-id').value = staffId;
+            document.getElementById('edit-shift-date').value = dateStr;
+            document.getElementById('edit-shift-id').value = shift?.id || '';
+
+            document.getElementById('shift-start-time').value = shift?.start_time || request?.start_time || '';
+            document.getElementById('shift-end-time').value = shift?.end_time || request?.end_time || '';
+            document.getElementById('shift-break').value = shift?.break_minutes || 0;
+            document.getElementById('shift-note').value = shift?.note || '';
+
+            // Render pattern quick-select buttons
+            const btnContainer = document.getElementById('shift-pattern-btns');
+            if (shiftPatterns.length > 0) {
+                btnContainer.innerHTML = shiftPatterns.map(p => `
+                    <button type="button" style="padding:4px 10px; border-radius:12px; border:2px solid ${p.color}40;
+                        background:${p.color}15; color:var(--text-primary); font-size:0.78rem; cursor:pointer;
+                        transition: all 0.15s;" 
+                        onclick="applyPatternToShift('${p.start_time}','${p.end_time}')"
+                        onmouseover="this.style.borderColor='${p.color}'; this.style.background='${p.color}30'"
+                        onmouseout="this.style.borderColor='${p.color}40'; this.style.background='${p.color}15'">
+                        ${escapeHtml(p.name)}<br><span style="font-size:0.7rem;opacity:0.7">${p.start_time}〜${p.end_time}</span>
+                    </button>
+                `).join('');
+            } else {
+                btnContainer.innerHTML = '<span style="font-size:0.8rem;color:var(--text-muted)">パターン未設定（シフト表タブ下部で追加）</span>';
+            }
+
+            // Update break auto-label
+            updateShiftBreak();
+
+            // Show request info
+            const infoEl = document.getElementById('shift-request-info');
+            if (request && request.is_available) {
+                let info = '📝 希望: ';
+                if (request.start_time && request.end_time) {
+                    info += `${request.start_time}〜${request.end_time}`;
+                } else {
+                    info += '出勤可';
+                }
+                if (request.note) info += ` (${request.note})`;
+                infoEl.textContent = info;
+                infoEl.style.display = '';
+            } else {
+                infoEl.style.display = 'none';
+            }
+
+            document.getElementById('delete-shift-btn').style.display = shift ? '' : 'none';
+            openModal('shift-modal');
+        }
+
+        function applyPatternToShift(startTime, endTime) {
+            document.getElementById('shift-start-time').value = startTime;
+            document.getElementById('shift-end-time').value = endTime;
+            updateShiftBreak();
+        }
+
+        function updateShiftBreak() {
+            const start = document.getElementById('shift-start-time').value;
+            const end = document.getElementById('shift-end-time').value;
+            const brk = calcBreakMinutes(start, end);
+            const label = document.getElementById('break-auto-label');
+            if (brk > 0) {
+                label.textContent = ` ← 自動: ${brk}分（労基法）`;
+                document.getElementById('shift-break').value = brk;
+            } else {
+                label.textContent = '';
+            }
+        }
+
+        // ============================================================
+        // Shift Pattern Management
+        // ============================================================
+        function renderPatternList() {
+            const container = document.getElementById('pattern-list');
+            if (!shiftPatterns.length) {
+                container.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">パターンが未登録です。「パターン追加」から登録してください。</div>';
+                return;
+            }
+            container.innerHTML = shiftPatterns.map(p => {
+                const brk = calcBreakMinutes(p.start_time, p.end_time);
+                const brkText = brk > 0 ? ` / 休憩${brk}分` : '';
+                return `
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;
+                    border:2px solid ${p.color}60;background:${p.color}10;min-width:160px;">
+                    <div style="width:12px;height:12px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600;font-size:0.85rem;">${escapeHtml(p.name)}</div>
+                        <div style="font-size:0.75rem;color:var(--text-secondary);">${p.start_time}〜${p.end_time}${brkText}</div>
+                    </div>
+                    <button onclick="editPattern(${p.id})" style="background:none;border:none;cursor:pointer;font-size:0.9rem;" title="編集">✏️</button>
+                    <button onclick="deletePattern(${p.id})" style="background:none;border:none;cursor:pointer;font-size:0.9rem;" title="削除">🗑️</button>
+                </div>`;
+            }).join('');
+        }
+
+        function openPatternModal(id = null) {
+            document.getElementById('edit-pattern-id').value = id || '';
+            document.getElementById('pattern-modal-title').textContent = id ? 'シフトパターン編集' : 'シフトパターン追加';
+
+            // Init time selects
+            document.getElementById('pattern-start').innerHTML = TIME_OPTIONS;
+            document.getElementById('pattern-end').innerHTML = TIME_OPTIONS;
+
+            if (id) {
+                const p = shiftPatterns.find(x => x.id === id);
+                if (p) {
+                    document.getElementById('pattern-name').value = p.name;
+                    document.getElementById('pattern-start').value = p.start_time;
+                    document.getElementById('pattern-end').value = p.end_time;
+                    document.getElementById('pattern-color').value = p.color;
+                }
+            } else {
+                document.getElementById('pattern-name').value = '';
+                document.getElementById('pattern-start').value = '';
+                document.getElementById('pattern-end').value = '';
+                document.getElementById('pattern-color').value = '#3B82F6';
+            }
+            openModal('pattern-modal');
+        }
+
+        function editPattern(id) {
+            openPatternModal(id);
+        }
+
+        async function savePattern() {
+            const id = document.getElementById('edit-pattern-id').value;
+            const data = {
+                name: document.getElementById('pattern-name').value,
+                start_time: document.getElementById('pattern-start').value,
+                end_time: document.getElementById('pattern-end').value,
+                color: document.getElementById('pattern-color').value,
+            };
+            if (!data.name || !data.start_time || !data.end_time) {
+                showToast('すべての項目を入力してください', 'error');
+                return;
+            }
+            try {
+                const url = id ? `/api/shift-patterns/${id}` : '/api/shift-patterns';
+                const method = id ? 'PUT' : 'POST';
+                await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                closeModal('pattern-modal');
+                showToast(id ? 'パターンを更新しました' : 'パターンを追加しました', 'success');
+                await loadShiftTable();
+            } catch (err) {
+                console.error(err);
+                showToast('保存に失敗しました', 'error');
+            }
+        }
+
+        async function deletePattern(id) {
+            if (!confirm('このパターンを削除しますか？')) return;
+            try {
+                await fetch(`/api/shift-patterns/${id}`, { method: 'DELETE' });
+                showToast('パターンを削除しました', 'success');
+                await loadShiftTable();
+            } catch (err) {
+                console.error(err);
+                showToast('削除に失敗しました', 'error');
+            }
+        }
+
+        async function saveShift() {
+            const data = {
+                staff_id: parseInt(document.getElementById('edit-shift-staff-id').value),
+                date: document.getElementById('edit-shift-date').value,
+                start_time: document.getElementById('shift-start-time').value || null,
+                end_time: document.getElementById('shift-end-time').value || null,
+                break_minutes: parseInt(document.getElementById('shift-break').value) || 0,
+                note: document.getElementById('shift-note').value,
+            };
+
+            try {
+                await fetch('/api/shifts', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+                });
+                showToast('シフトを保存しました', 'success');
+                closeModal('shift-modal');
+                await loadShiftTable();
+            } catch {
+                showToast('保存に失敗しました', 'error');
+            }
+        }
+
+        async function deleteShift() {
+            const id = document.getElementById('edit-shift-id').value;
+            if (!id || !confirm('このシフトを削除しますか？')) return;
+            try {
+                await fetch(`/api/shifts/${id}`, { method: 'DELETE' });
+                showToast('シフトを削除しました', 'success');
+                closeModal('shift-modal');
+                await loadShiftTable();
+            } catch {
+                showToast('削除に失敗しました', 'error');
+            }
+        }
+
+        async function applyRequests(overwrite) {
+            const msg = overwrite
+                ? '既存のシフトを上書きして希望を転記しますか？'
+                : '未登録のシフトに希望を転記しますか？（既存シフトはそのまま）';
+            if (!confirm(msg)) return;
+
+            try {
+                const res = await fetch('/api/shifts/apply-requests', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year: currentYear, month: currentMonth, overwrite })
+                });
+                const result = await res.json();
+                showToast(result.message, 'success');
+                await loadShiftTable();
+            } catch {
+                showToast('転記に失敗しました', 'error');
+            }
+        }
+
+        // ============================================================
+        // Cost Simulation
+        // ============================================================
+        async function loadCostSimulation() {
+            try {
+                const res = await fetch(`/api/cost-simulation?year=${currentYear}&month=${currentMonth}${selectedClubId ? '&club_id=' + selectedClubId : ''}`);
+                costData = await res.json();
+                renderCostStats();
+                renderCostTable();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderCostStats() {
+            if (!costData) return;
+            const s = costData.summary;
+            document.getElementById('cost-stats').innerHTML = `
+        <div class="stat-card highlight">
+          <div class="stat-icon">💰</div>
+          <div class="stat-value">${formatYen(s.total_cost)}</div>
+          <div class="stat-label">月間人件費合計</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏰</div>
+          <div class="stat-value">${formatYen(s.hourly_staff_cost)}</div>
+          <div class="stat-label">時給スタッフ計（${s.hourly_count}名）</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📋</div>
+          <div class="stat-value">${formatYen(s.monthly_staff_cost)}</div>
+          <div class="stat-label">月給スタッフ計（${s.monthly_count}名）</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-value">${s.staff_count}</div>
+          <div class="stat-label">スタッフ総数</div>
+        </div>
+      `;
+        }
+
+        function renderCostTable() {
+            if (!costData) return;
+            const tbody = document.getElementById('cost-table-body');
+            if (!costData.staff.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:40px;">データがありません</td></tr>';
+                return;
+            }
+
+            let totalCost = 0;
+            tbody.innerHTML = costData.staff.map(s => {
+                totalCost += s.cost;
+                return `<tr>
+          <td style="font-weight:500">${escapeHtml(s.staff_name)}</td>
+          <td><span class="badge badge-${s.pay_type}">${s.pay_type === 'hourly' ? '時給' : '月給'}</span></td>
+          <td class="numeric">${s.pay_type === 'hourly' ? formatYen(s.hourly_rate) + '/h' : formatYen(s.monthly_salary)}</td>
+          <td class="numeric">${s.total_days}日</td>
+          <td class="numeric">${s.total_hours}h</td>
+          <td class="numeric" style="font-weight:600; color: var(--primary-300);">${formatYen(s.cost)}</td>
+        </tr>`;
+            }).join('') + `<tr style="background: var(--surface-glass); font-weight: 700;">
+        <td colspan="5" style="text-align:right;">合計</td>
+        <td class="numeric" style="color: var(--primary-300); font-size: 1.1rem;">${formatYen(totalCost)}</td>
+      </tr>`;
+        }
+
+        // ============================================================
+        // Dashboard
+        // ============================================================
+        async function loadDashboard() {
+            try {
+                const res = await fetch(`/api/cost-simulation?year=${currentYear}&month=${currentMonth}${selectedClubId ? '&club_id=' + selectedClubId : ''}`);
+                const data = await res.json();
+
+                document.getElementById('dashboard-stats').innerHTML = `
+          <div class="stat-card highlight">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value">${formatYen(data.summary.total_cost)}</div>
+            <div class="stat-label">${currentMonth}月 人件費合計</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value">${data.summary.staff_count}</div>
+            <div class="stat-label">スタッフ数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏰</div>
+            <div class="stat-value">${formatYen(data.summary.hourly_staff_cost)}</div>
+            <div class="stat-label">時給スタッフ計</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📋</div>
+            <div class="stat-value">${formatYen(data.summary.monthly_staff_cost)}</div>
+            <div class="stat-label">月給スタッフ計</div>
+          </div>
+        `;
+
+                // Summary table of top staff costs
+                const top5 = data.staff.filter(s => s.cost > 0).sort((a, b) => b.cost - a.cost).slice(0, 5);
+                let summaryHtml = '';
+                if (top5.length) {
+                    summaryHtml = `<div class="table-container"><table>
+            <thead><tr><th>スタッフ</th><th>出勤</th><th>時間</th><th>人件費</th></tr></thead>
+            <tbody>${top5.map(s => `<tr>
+              <td>${escapeHtml(s.staff_name)}</td>
+              <td class="numeric">${s.total_days}日</td>
+              <td class="numeric">${s.total_hours}h</td>
+              <td class="numeric" style="font-weight:600;color:var(--primary-300)">${formatYen(s.cost)}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>`;
+                } else {
+                    summaryHtml = `<div class="empty-state"><div class="empty-icon">📊</div><p class="empty-text">まだシフトデータがありません</p></div>`;
+                }
+                document.getElementById('dashboard-summary').innerHTML = summaryHtml;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // ============================================================
+        // CSV Export
+        // ============================================================
+        function exportCSV() {
+            window.open(`/api/shifts/export-csv?year=${currentYear}&month=${currentMonth}`, '_blank');
+        }
+
+        // ============================================================
+        // Share
+        // ============================================================
+        let orgName = '';
+        let lanUrl = ''; // Will be set from server-info API
+
+        function getStaffUrl(clubId = 1) {
+            // Use LAN URL if available, otherwise fall back to current origin
+            const base = lanUrl || window.location.origin;
+            return `${base}/staff/${clubId}`;
+        }
+
+        function getMessageTemplate() {
+            const monthText = `${currentYear}年${currentMonth}月`;
+            let urls = '';
+            for (let i = 1; i <= 6; i++) {
+                urls += `  クラブ${i}: ${getStaffUrl(i)}\n`;
+            }
+            return `【シフト希望入力のお願い】
+
+${orgName}のシフト管理です。
+${monthText}のシフト希望を以下のURLから入力してください。
+
+📱 シフト入力はこちら：
+${urls}
+【入力方法】
+1️⃣ 自分のクラブのURLをタップ
+2️⃣ ご自分の名前を選択
+3️⃣ 出勤可能な日のスイッチをON
+4️⃣ 出勤・退勤時刻を入力
+5️⃣ 「シフト希望を送信」をタップ
+
+期限までにご入力をお願いします🙏`;
+        }
+
+        async function initShareTab() {
+            // Fetch base URL from server (cloud or LAN)
+            try {
+                const res = await fetch('/api/server-info');
+                const info = await res.json();
+                if (info.url) {
+                    lanUrl = info.url; // Production: full URL from server
+                } else if (info.ip) {
+                    lanUrl = `http://${info.ip}:${info.port}`; // Local: LAN IP
+                }
+            } catch (e) {
+                console.warn('Could not get server info, using current origin');
+            }
+
+            const staffUrl = getStaffUrl(1);
+
+            // Update URL display
+            document.getElementById('staff-url').textContent = staffUrl;
+
+            // Show all club URLs
+            const clubUrlList = document.getElementById('club-url-list');
+            if (clubUrlList) {
+                let html = '';
+                for (let i = 1; i <= 6; i++) {
+                    html += `<div style="margin-bottom: 4px;">クラブ${i}: <a href="${getStaffUrl(i)}" target="_blank" style="color:var(--primary);">${getStaffUrl(i)}</a></div>`;
+                }
+                clubUrlList.innerHTML = html;
+            }
+
+            // Generate QR Code with LAN URL
+            const qrImg = document.getElementById('qr-code-img');
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(staffUrl)}&margin=8`;
+
+            // Set message template
+            document.getElementById('message-template').textContent = getMessageTemplate();
+
+            // Hide Web Share API button if not supported
+            if (!navigator.share) {
+                document.getElementById('web-share-btn').style.display = 'none';
+            }
+        }
+
+        function copyStaffUrl() {
+            const url = getStaffUrl();
+            navigator.clipboard.writeText(url).then(() => showToast('URLをコピーしました', 'success'));
+        }
+
+
+        function copyMessageTemplate() {
+            const msg = getMessageTemplate();
+            navigator.clipboard.writeText(msg).then(() => showToast('メッセージをコピーしました！LINE WORKSやメールに貼り付けてください', 'success'));
+        }
+
+        function shareViaLINEWORKS() {
+            // Copy message to clipboard and open LINE WORKS
+            const msg = getMessageTemplate();
+            navigator.clipboard.writeText(msg).then(() => {
+                showToast('メッセージをコピーしました！LINE WORKSに貼り付けてください', 'success');
+                // Try to open LINE WORKS desktop/web
+                const lineworksUrl = `https://talk.worksmobile.com/`;
+                window.open(lineworksUrl, '_blank');
+            }).catch(() => {
+                // Fallback: show the message for manual copy
+                showToast('LINE WORKSを開いてメッセージを貼り付けてください', 'info');
+                window.open('https://talk.worksmobile.com/', '_blank');
+            });
+        }
+
+        function shareViaEmail() {
+            const subject = encodeURIComponent(`【${orgName}】シフト希望入力のお願い`);
+            const body = encodeURIComponent(getMessageTemplate());
+            window.location.href = `mailto:?subject=${subject}&body=${body}`;
+            showToast('メールアプリを開いています…', 'info');
+        }
+
+        async function shareViaWebAPI() {
+            if (!navigator.share) {
+                showToast('お使いのブラウザではこの機能をご利用いただけません', 'error');
+                return;
+            }
+            try {
+                await navigator.share({
+                    title: `【${orgName}】シフト希望入力`,
+                    text: getMessageTemplate(),
+                    url: getStaffUrl()
+                });
+                showToast('共有しました', 'success');
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    showToast('共有に失敗しました', 'error');
+                }
+            }
+        }
+
+        function printQRCode() {
+            const staffUrl = getStaffUrl();
+            const printWindow = window.open('', '_blank');
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(staffUrl)}&margin=8`;
+            const html = '<!DOCTYPE html><html><head><title>QRコード - ' + orgName + '</title>' +
+                '<style>' +
+                'body { font-family: "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif; text-align: center; padding: 40px; }' +
+                'h1 { font-size: 1.5rem; margin-bottom: 8px; }' +
+                'h2 { font-size: 1.1rem; color: #666; font-weight: normal; margin-bottom: 24px; }' +
+                'img { border: 3px solid #333; border-radius: 12px; padding: 12px; }' +
+                '.url { font-size: 0.85rem; color: #666; margin-top: 16px; word-break: break-all; }' +
+                '.instructions { margin-top: 24px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; font-size: 0.9rem; line-height: 1.8; background: #f5f5f5; padding: 16px 24px; border-radius: 8px; }' +
+                '</style></head><body>' +
+                '<h1>📱 シフト希望入力</h1>' +
+                '<h2>' + orgName + '</h2>' +
+                '<img src="' + qrUrl + '" width="250" height="250">' +
+                '<div class="url">' + staffUrl + '</div>' +
+                '<div class="instructions">' +
+                '<strong>📝 入力方法</strong><br>' +
+                '1. QRコードをスマホで読み取り<br>' +
+                '2. ご自分の名前を選択<br>' +
+                '3. 出勤可能な日をONに<br>' +
+                '4. 時間を入力して送信' +
+                '</div>' +
+                '<scr' + 'ipt>window.onload=function(){window.print();}</scr' + 'ipt>' +
+                '</body></html>';
+            printWindow.document.write(html);
+            printWindow.document.close();
+        }
+
+        // ============================================================
+        // Modal Helpers
+        // ============================================================
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // Close modal on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => {
+                if (e.target === overlay) overlay.classList.remove('active');
+            });
+        });
+
+        // ============================================================
+        // Utilities
+        // ============================================================
+        function formatYen(amount) {
+            return '¥' + (amount || 0).toLocaleString();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>

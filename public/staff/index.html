@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>シフト希望入力</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            background: var(--bg-900);
+        }
+
+        .staff-header {
+            text-align: center;
+            padding: var(--space-lg) var(--space-md);
+            background: var(--surface-primary);
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: var(--space-md);
+        }
+
+        .staff-header .org-name {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .staff-header h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-400), var(--accent-400));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .staff-select-section {
+            padding: 0 var(--space-md);
+            margin-bottom: var(--space-md);
+        }
+
+        .staff-select-section select {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 1rem;
+        }
+
+        .month-nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-md);
+            padding: var(--space-sm) var(--space-md);
+            margin-bottom: var(--space-sm);
+        }
+
+        .month-nav .month-label {
+            font-size: 1.2rem;
+            font-weight: 700;
+            min-width: 140px;
+            text-align: center;
+        }
+
+        .btn-month-nav {
+            padding: 10px 18px;
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        /* ===== Bulk Input Section ===== */
+        .bulk-section {
+            margin: 0 var(--space-md) var(--space-md);
+            padding: var(--space-md);
+            background: var(--surface-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+        }
+
+        .bulk-section h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: var(--space-sm);
+            color: var(--accent-400);
+        }
+
+        .pattern-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: var(--space-sm);
+        }
+
+        .pattern-chip {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 2px solid var(--border-color);
+            background: var(--surface-secondary);
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+        }
+
+        .pattern-chip.active {
+            border-color: var(--primary-500);
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--primary-400);
+        }
+
+        .pattern-chip .pattern-time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            display: block;
+        }
+
+        .manual-time-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: var(--space-sm);
+        }
+
+        .manual-time-row label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            min-width: 28px;
+        }
+
+        .bulk-day-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: var(--space-sm);
+        }
+
+        .bulk-day-btn {
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: var(--surface-secondary);
+            color: var(--text-primary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .bulk-day-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--primary-500);
+        }
+
+        .bulk-apply-btn {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, var(--primary-500), var(--accent-500));
+            border: none;
+            border-radius: var(--radius-md);
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .bulk-apply-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .break-info {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--warning-400);
+            margin-bottom: var(--space-sm);
+            padding: 4px 8px;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: var(--radius-sm);
+        }
+
+        .break-info:empty {
+            display: none;
+        }
+
+        /* ===== Time Select ===== */
+        .time-select {
+            width: 100%;
+            padding: 8px 4px;
+            background: var(--bg-800);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.82rem;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .time-select:focus {
+            border-color: var(--primary-500);
+            outline: none;
+        }
+
+        /* ===== Date List ===== */
+        .date-list {
+            padding: 0 var(--space-md);
+        }
+
+        .date-item {
+            display: grid;
+            grid-template-columns: 70px 48px 1fr;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: 10px var(--space-md);
+            background: var(--surface-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-sm);
+            transition: all var(--transition-fast);
+        }
+
+        .date-item.available {
+            border-color: rgba(59, 130, 246, 0.3);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .date-info {
+            line-height: 1.3;
+        }
+
+        .date-info .day-num {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .date-info .day-name {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .date-info .day-name.sun {
+            color: var(--danger-400);
+        }
+
+        .date-info .day-name.sat {
+            color: var(--primary-400);
+        }
+
+        .time-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .time-sep {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .submit-bar {
+            position: sticky;
+            bottom: 0;
+            padding: var(--space-md);
+            background: var(--bg-900);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .submit-bar button {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+        }
+
+        .submitted-badge {
+            text-align: center;
+            padding: 6px;
+            font-size: 0.8rem;
+            color: var(--success-400);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="staff-header">
+        <div class="org-name" id="org-name"></div>
+        <h1>📅 シフト希望入力</h1>
+    </div>
+
+    <div class="staff-select-section">
+        <select class="form-select" id="staff-select" onchange="onStaffChange()">
+            <option value="">スタッフを選択してください</option>
+        </select>
+    </div>
+
+    <div class="month-nav">
+        <button class="btn-month-nav" onclick="changeMonth(-1)">◀</button>
+        <span class="month-label" id="month-label"></span>
+        <button class="btn-month-nav" onclick="changeMonth(1)">▶</button>
+    </div>
+
+    <!-- Bulk Input Section -->
+    <div class="bulk-section" id="bulk-section" style="display:none;">
+        <h3>⚡ 一括入力</h3>
+
+        <!-- Pattern selection -->
+        <div class="pattern-chips" id="pattern-chips">
+            <div class="pattern-chip" onclick="selectBulkPattern('manual')" id="chip-manual">
+                ✏️ 手入力
+            </div>
+        </div>
+
+        <!-- Manual time input (shown only when 手入力 is selected) -->
+        <div id="manual-time-inputs" style="display:none;">
+            <div class="manual-time-row">
+                <label>出勤</label>
+                <select class="time-select" id="bulk-start" onchange="updateBulkBreak()"></select>
+                <label>退勤</label>
+                <select class="time-select" id="bulk-end" onchange="updateBulkBreak()"></select>
+            </div>
+        </div>
+
+        <div class="break-info" id="bulk-break-info"></div>
+
+        <!-- Day selection buttons -->
+        <div class="bulk-day-btns">
+            <button class="bulk-day-btn" onclick="bulkSelectDays('weekday')">📅 平日すべて</button>
+            <button class="bulk-day-btn" onclick="bulkSelectDays('saturday')">📅 土曜すべて</button>
+            <button class="bulk-day-btn" onclick="bulkSelectDays('all')">📅 全日</button>
+            <button class="bulk-day-btn" onclick="bulkSelectDays('clear')">🗑️ クリア</button>
+        </div>
+
+        <button class="bulk-apply-btn" onclick="applyBulk()">📥 選択した日に一括適用</button>
+    </div>
+
+    <div id="date-list" class="date-list"></div>
+
+    <div class="submit-bar" id="submit-bar" style="display:none;">
+        <div class="submitted-badge" id="submitted-badge" style="display:none;">✅ 送信済み</div>
+        <button class="btn btn-primary" onclick="submitRequests()">📤 シフト希望を送信</button>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        const CLUB_ID = parseInt(window.location.pathname.split('/')[2]) || 1;
+        const now = new Date();
+        let currentYear = now.getFullYear();
+        let currentMonth = now.getMonth() + 2;
+        if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+        let staffList = [];
+        let selectedStaffId = null;
+        let existingRequests = [];
+        let shiftPatterns = [];
+        let selectedBulkPattern = null;
+
+        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+        // Generate 15-minute interval time options (7:00-19:00)
+        function generateTimeOptions() {
+            const options = ['<option value="">--:--</option>'];
+            for (let h = 7; h <= 19; h++) {
+                for (let m = 0; m < 60; m += 15) {
+                    if (h === 19 && m > 0) break;
+                    const val = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                    options.push(`<option value="${val}">${val}</option>`);
+                }
+            }
+            return options.join('');
+        }
+
+        const TIME_OPTIONS_HTML = generateTimeOptions();
+
+        // Break calculation (labor standards law)
+        function calcBreak(startTime, endTime) {
+            if (!startTime || !endTime) return 0;
+            const [sh, sm] = startTime.split(':').map(Number);
+            const [eh, em] = endTime.split(':').map(Number);
+            const totalMin = (eh * 60 + em) - (sh * 60 + sm);
+            if (totalMin > 480) return 60;
+            if (totalMin > 360) return 45;
+            return 0;
+        }
+
+        function breakLabel(minutes) {
+            if (minutes === 0) return '';
+            return `⏸️ 休憩 ${minutes}分（労基法に基づき自動計算）`;
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Load club info
+                const clubsRes = await fetch('/api/clubs');
+                const clubs = await clubsRes.json();
+                const club = clubs.find(c => c.id === CLUB_ID);
+                document.getElementById('org-name').textContent = club ? `にこにこおひさま - ${club.name}` : 'にこにこおひさまクラブ';
+
+                // Load staff for this club
+                const staffRes = await fetch(`/api/staff?club_id=${CLUB_ID}`);
+                staffList = await staffRes.json();
+                const select = document.getElementById('staff-select');
+                staffList.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    select.appendChild(opt);
+                });
+
+                // Load shift patterns
+                const patRes = await fetch('/api/shift-patterns');
+                shiftPatterns = await patRes.json();
+                renderPatternChips();
+
+                // Restore previous selection
+                const savedId = localStorage.getItem(`staff_club_${CLUB_ID}`);
+                if (savedId) {
+                    select.value = savedId;
+                    onStaffChange();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            // Init bulk time selects
+            document.getElementById('bulk-start').innerHTML = TIME_OPTIONS_HTML;
+            document.getElementById('bulk-end').innerHTML = TIME_OPTIONS_HTML;
+
+            updateMonthLabel();
+            renderDateList();
+        });
+
+        function renderPatternChips() {
+            const container = document.getElementById('pattern-chips');
+            let html = '<div class="pattern-chip" onclick="selectBulkPattern(\'manual\')" id="chip-manual">✏️ 手入力</div>';
+            for (const p of shiftPatterns) {
+                const brk = calcBreak(p.start_time, p.end_time);
+                const brkText = brk > 0 ? ` (休憩${brk}分)` : '';
+                html += `<div class="pattern-chip" onclick="selectBulkPattern(${p.id})" id="chip-${p.id}" 
+                    style="border-color: ${p.color}40" data-start="${p.start_time}" data-end="${p.end_time}">
+                    <span>${p.name}</span>
+                    <span class="pattern-time">${p.start_time}〜${p.end_time}${brkText}</span>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function selectBulkPattern(patternId) {
+            // Deselect all
+            document.querySelectorAll('.pattern-chip').forEach(c => c.classList.remove('active'));
+
+            if (patternId === 'manual') {
+                document.getElementById('chip-manual').classList.add('active');
+                document.getElementById('manual-time-inputs').style.display = '';
+                selectedBulkPattern = 'manual';
+                updateBulkBreak();
+            } else {
+                const chip = document.getElementById(`chip-${patternId}`);
+                chip.classList.add('active');
+                document.getElementById('manual-time-inputs').style.display = 'none';
+                selectedBulkPattern = shiftPatterns.find(p => p.id === patternId);
+                const brk = calcBreak(selectedBulkPattern.start_time, selectedBulkPattern.end_time);
+                document.getElementById('bulk-break-info').textContent = breakLabel(brk);
+            }
+        }
+
+        function updateBulkBreak() {
+            const start = document.getElementById('bulk-start').value;
+            const end = document.getElementById('bulk-end').value;
+            const brk = calcBreak(start, end);
+            document.getElementById('bulk-break-info').textContent = breakLabel(brk);
+        }
+
+        function bulkSelectDays(mode) {
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(currentYear, currentMonth - 1, d);
+                const dow = date.getDay();
+                const btn = document.getElementById(`toggle-${d}`);
+                const item = document.getElementById(`item-${d}`);
+
+                let shouldSelect = false;
+                if (mode === 'weekday') shouldSelect = dow >= 1 && dow <= 5;
+                else if (mode === 'saturday') shouldSelect = dow === 6;
+                else if (mode === 'all') shouldSelect = true;
+                else if (mode === 'clear') shouldSelect = false;
+
+                if (mode === 'clear') {
+                    btn.classList.remove('active');
+                    item.classList.remove('available');
+                    document.getElementById(`start-${d}`).value = '';
+                    document.getElementById(`end-${d}`).value = '';
+                } else if (shouldSelect) {
+                    btn.classList.add('active');
+                    item.classList.add('available');
+                }
+            }
+        }
+
+        function applyBulk() {
+            let startTime, endTime;
+
+            if (selectedBulkPattern === 'manual') {
+                startTime = document.getElementById('bulk-start').value;
+                endTime = document.getElementById('bulk-end').value;
+                if (!startTime || !endTime) {
+                    showToast('出勤・退勤時刻を選択してください', 'error');
+                    return;
+                }
+            } else if (selectedBulkPattern) {
+                startTime = selectedBulkPattern.start_time;
+                endTime = selectedBulkPattern.end_time;
+            } else {
+                showToast('パターンまたは手入力を選択してください', 'error');
+                return;
+            }
+
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            let count = 0;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const btn = document.getElementById(`toggle-${d}`);
+                if (btn.classList.contains('active')) {
+                    document.getElementById(`start-${d}`).value = startTime;
+                    document.getElementById(`end-${d}`).value = endTime;
+                    count++;
+                }
+            }
+
+            if (count === 0) {
+                showToast('日付を選択してから適用してください', 'error');
+            } else {
+                showToast(`${count}日分のシフトを一括入力しました`, 'success');
+            }
+        }
+
+        function updateMonthLabel() {
+            document.getElementById('month-label').textContent = `${currentYear}年 ${currentMonth}月`;
+        }
+
+        function changeMonth(delta) {
+            currentMonth += delta;
+            if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+            if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+            updateMonthLabel();
+            renderDateList();
+            if (selectedStaffId) loadExistingRequests();
+        }
+
+        async function onStaffChange() {
+            const select = document.getElementById('staff-select');
+            selectedStaffId = select.value ? parseInt(select.value) : null;
+
+            if (selectedStaffId) {
+                localStorage.setItem(`staff_club_${CLUB_ID}`, selectedStaffId);
+                document.getElementById('submit-bar').style.display = '';
+                document.getElementById('bulk-section').style.display = '';
+                await loadExistingRequests();
+            } else {
+                document.getElementById('submit-bar').style.display = 'none';
+                document.getElementById('bulk-section').style.display = 'none';
+            }
+        }
+
+        async function loadExistingRequests() {
+            try {
+                const res = await fetch(`/api/shift-requests?year=${currentYear}&month=${currentMonth}`);
+                const all = await res.json();
+                existingRequests = all.filter(r => r.staff_id === selectedStaffId);
+                applyExistingToUI();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function applyExistingToUI() {
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const req = existingRequests.find(r => r.date === dateStr);
+                const toggleBtn = document.getElementById(`toggle-${d}`);
+                const startInput = document.getElementById(`start-${d}`);
+                const endInput = document.getElementById(`end-${d}`);
+                const item = document.getElementById(`item-${d}`);
+
+                if (req && req.is_available) {
+                    toggleBtn.classList.add('active');
+                    item.classList.add('available');
+                    if (req.start_time) startInput.value = req.start_time;
+                    if (req.end_time) endInput.value = req.end_time;
+                } else {
+                    toggleBtn.classList.remove('active');
+                    item.classList.remove('available');
+                    startInput.value = '';
+                    endInput.value = '';
+                }
+            }
+
+            document.getElementById('submitted-badge').style.display =
+                existingRequests.length > 0 ? '' : 'none';
+        }
+
+        function renderDateList() {
+            const container = document.getElementById('date-list');
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+            let html = '';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(currentYear, currentMonth - 1, d);
+                const dow = date.getDay();
+                const dowClass = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';
+
+                html += `
+          <div class="date-item" id="item-${d}">
+            <div class="date-info">
+              <span class="day-num">${d}</span>
+              <span class="day-name ${dowClass}">(${dayNames[dow]})</span>
+            </div>
+            <button class="toggle-btn" id="toggle-${d}" onclick="toggleDay(${d})"></button>
+            <div class="time-row">
+              <select class="time-select" id="start-${d}" onfocus="autoActivate(${d})">${TIME_OPTIONS_HTML}</select>
+              <span class="time-sep">〜</span>
+              <select class="time-select" id="end-${d}" onfocus="autoActivate(${d})">${TIME_OPTIONS_HTML}</select>
+            </div>
+          </div>
+        `;
+            }
+            container.innerHTML = html;
+        }
+
+        function toggleDay(d) {
+            const btn = document.getElementById(`toggle-${d}`);
+            const item = document.getElementById(`item-${d}`);
+            btn.classList.toggle('active');
+            item.classList.toggle('available');
+        }
+
+        function autoActivate(d) {
+            const btn = document.getElementById(`toggle-${d}`);
+            const item = document.getElementById(`item-${d}`);
+            if (!btn.classList.contains('active')) {
+                btn.classList.add('active');
+                item.classList.add('available');
+            }
+        }
+
+        async function submitRequests() {
+            if (!selectedStaffId) { showToast('スタッフを選択してください', 'error'); return; }
+
+            const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+            const requests = [];
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const isAvailable = document.getElementById(`toggle-${d}`).classList.contains('active');
+                const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const startTime = document.getElementById(`start-${d}`).value;
+                const endTime = document.getElementById(`end-${d}`).value;
+
+                if (isAvailable) {
+                    requests.push({
+                        date: dateStr,
+                        start_time: startTime || null,
+                        end_time: endTime || null,
+                        is_available: 1
+                    });
+                }
+            }
+
+            try {
+                const res = await fetch('/api/shift-requests', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        staff_id: selectedStaffId,
+                        year: currentYear,
+                        month: currentMonth,
+                        requests
+                    })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showToast(`${requests.length}日分のシフト希望を送信しました！`, 'success');
+                    document.getElementById('submitted-badge').style.display = '';
+                } else {
+                    showToast('送信に失敗しました', 'error');
+                }
+            } catch {
+                showToast('送信に失敗しました', 'error');
+            }
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+
+</html>
