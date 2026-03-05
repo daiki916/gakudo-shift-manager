@@ -147,4 +147,62 @@ router.delete('/staff/:id', async (req, res) => {
     }
 });
 
+// Bulk import staff
+router.post('/staff/bulk-import', async (req, res) => {
+    try {
+        const { staff_list } = req.body;
+        if (!Array.isArray(staff_list) || staff_list.length === 0) {
+            return res.status(400).json({ error: 'staff_list（配列）は必須です' });
+        }
+
+        // Get existing staff names to avoid duplicates
+        const existing = await queryAll('SELECT name FROM staff WHERE org_id = $1', [ORG_ID]);
+        const existingNames = new Set(existing.map(s => s.name.trim()));
+
+        let imported = 0;
+        let skipped = 0;
+        const maxOrder = await queryOne('SELECT MAX(display_order) as max_order FROM staff WHERE org_id = $1', [ORG_ID]);
+        let order = (maxOrder?.max_order ?? 0) + 1;
+
+        for (const s of staff_list) {
+            const name = (s.name || '').trim();
+            if (!name) { skipped++; continue; }
+
+            // Skip if already exists
+            if (existingNames.has(name)) { skipped++; continue; }
+
+            // Parse club from staff_master.json format (e.g. "5クラブ" → 5, "1クラブ" → 1)
+            let clubId = 1;
+            if (s.club_id) {
+                clubId = parseInt(s.club_id) || 1;
+            } else if (s.club) {
+                const match = s.club.match(/(\d+)/);
+                clubId = match ? parseInt(match[1]) : 1;
+            }
+            if (clubId < 1 || clubId > 6) clubId = 1;
+
+            const payType = s.pay_type || 'hourly';
+            const hourlyRate = s.hourly_rate || 0;
+            const monthlySalary = s.monthly_salary || 0;
+
+            await runSQL(
+                'INSERT INTO staff (org_id, club_id, name, pay_type, hourly_rate, monthly_salary, display_order) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [ORG_ID, clubId, name, payType, hourlyRate, monthlySalary, order++]
+            );
+            existingNames.add(name);
+            imported++;
+        }
+
+        res.json({
+            success: true,
+            message: `${imported}名をインポートしました（スキップ: ${skipped}名）`,
+            imported,
+            skipped
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'スタッフの一括インポートに失敗しました' });
+    }
+});
+
 module.exports = router;

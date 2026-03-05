@@ -56,6 +56,8 @@
                     <h2 class="card-title">👥 スタッフマスタ</h2>
                     <div class="btn-group">
                         <button class="btn btn-primary" onclick="openAddStaffModal()">＋ スタッフ追加</button>
+                        <button class="btn btn-secondary" onclick="openImportModal()" style="margin-left:8px">📥
+                            一括インポート</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -271,6 +273,34 @@
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeModal('staff-modal')">キャンセル</button>
                 <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Staff Modal -->
+    <div class="modal-overlay" id="import-modal">
+        <div class="modal" style="max-width:600px">
+            <h3 class="modal-title">📥 スタッフ一括インポート</h3>
+            <div class="form-group">
+                <label class="form-label">JSONファイルを選択</label>
+                <input type="file" accept=".json" id="import-file" onchange="handleImportFile(event)"
+                    style="margin-bottom:12px">
+            </div>
+            <div class="form-group">
+                <label class="form-label">または JSONデータを貼り付け</label>
+                <textarea id="import-json" class="form-input" rows="8"
+                    placeholder='[{"name": "山田太郎", "club": "1クラブ"}, ...]'
+                    style="font-family: monospace; font-size: 0.85rem;"></textarea>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px;">💡
+                freeeのスタッフマスタJSON形式に対応。クラブ未設定のスタッフはクラブ1に登録されます。</p>
+            <div id="import-preview"
+                style="display:none; margin-bottom:12px; padding:12px; background:var(--bg-800); border-radius:8px; font-size:0.85rem;">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal('import-modal')">キャンセル</button>
+                <button class="btn btn-primary" id="import-submit-btn" onclick="submitImport()"
+                    disabled>インポート実行</button>
             </div>
         </div>
     </div>
@@ -595,6 +625,88 @@
                 await loadStaff();
             } catch {
                 showToast('削除に失敗しました', 'error');
+            }
+        }
+
+        // ============================================================
+        // Bulk Import
+        // ============================================================
+        let importData = null;
+
+        function openImportModal() {
+            importData = null;
+            document.getElementById('import-file').value = '';
+            document.getElementById('import-json').value = '';
+            document.getElementById('import-preview').style.display = 'none';
+            document.getElementById('import-submit-btn').disabled = true;
+            document.getElementById('import-modal').classList.add('active');
+        }
+
+        function handleImportFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('import-json').value = e.target.result;
+                parseImportData();
+            };
+            reader.readAsText(file);
+        }
+
+        function parseImportData() {
+            const jsonText = document.getElementById('import-json').value.trim();
+            const preview = document.getElementById('import-preview');
+            const btn = document.getElementById('import-submit-btn');
+
+            if (!jsonText) {
+                preview.style.display = 'none';
+                btn.disabled = true;
+                importData = null;
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonText);
+                if (!Array.isArray(data)) throw new Error('配列ではありません');
+                importData = data;
+
+                const withClub = data.filter(s => s.club && s.club.match(/\d/));
+                const withoutClub = data.length - withClub.length;
+
+                preview.innerHTML = `<strong>✅ ${data.length}名</strong> のスタッフデータを検出<br>` +
+                    `クラブ設定あり: ${withClub.length}名 / 未設定: ${withoutClub}名（→クラブ1に登録）<br>` +
+                    `<span style="color:var(--text-muted)">※既に登録済みのスタッフは自動スキップされます</span>`;
+                preview.style.display = 'block';
+                btn.disabled = false;
+            } catch (e) {
+                preview.innerHTML = `<span style="color: var(--danger)">❌ JSONの解析に失敗: ${e.message}</span>`;
+                preview.style.display = 'block';
+                btn.disabled = true;
+                importData = null;
+            }
+        }
+
+        // Listen for manual paste/edit in textarea
+        document.addEventListener('DOMContentLoaded', () => {
+            const ta = document.getElementById('import-json');
+            if (ta) ta.addEventListener('input', parseImportData);
+        });
+
+        async function submitImport() {
+            if (!importData || !importData.length) return;
+            try {
+                const res = await fetch('/api/staff/bulk-import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staff_list: importData })
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.error);
+                showToast(result.message, 'success');
+                closeModal('import-modal');
+                await loadStaff();
+            } catch (e) {
+                showToast(e.message || 'インポートに失敗しました', 'error');
             }
         }
 
