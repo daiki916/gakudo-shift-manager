@@ -104,7 +104,7 @@ router.post('/staff', async (req, res) => {
 // Update staff
 router.put('/staff/:id', async (req, res) => {
     try {
-        const { name, pay_type, hourly_rate, monthly_salary, is_active, display_order, club_id } = req.body;
+        const { name, pay_type, hourly_rate, monthly_salary, commute_allowance, qualification_allowance, other_allowance, is_active, display_order, club_id } = req.body;
         const staff = await queryOne('SELECT * FROM staff WHERE id = $1 AND org_id = $2', [parseInt(req.params.id), ORG_ID]);
         if (!staff) return res.status(404).json({ error: 'スタッフが見つかりません' });
 
@@ -116,6 +116,9 @@ router.put('/staff/:id', async (req, res) => {
         if (pay_type !== undefined) { updates.push(`pay_type = $${paramIdx++}`); params.push(pay_type); }
         if (hourly_rate !== undefined) { updates.push(`hourly_rate = $${paramIdx++}`); params.push(hourly_rate); }
         if (monthly_salary !== undefined) { updates.push(`monthly_salary = $${paramIdx++}`); params.push(monthly_salary); }
+        if (commute_allowance !== undefined) { updates.push(`commute_allowance = $${paramIdx++}`); params.push(commute_allowance); }
+        if (qualification_allowance !== undefined) { updates.push(`qualification_allowance = $${paramIdx++}`); params.push(qualification_allowance); }
+        if (other_allowance !== undefined) { updates.push(`other_allowance = $${paramIdx++}`); params.push(other_allowance); }
         if (is_active !== undefined) { updates.push(`is_active = $${paramIdx++}`); params.push(is_active); }
         if (display_order !== undefined) { updates.push(`display_order = $${paramIdx++}`); params.push(display_order); }
         if (club_id !== undefined) { updates.push(`club_id = $${paramIdx++}`); params.push(club_id); }
@@ -227,10 +230,13 @@ router.post('/staff/bulk-update-salary', async (req, res) => {
             const payType = s.pay_type || staff.pay_type;
             const hourlyRate = s.hourly_rate !== undefined ? s.hourly_rate : staff.hourly_rate;
             const monthlySalary = s.monthly_salary !== undefined ? s.monthly_salary : staff.monthly_salary;
+            const commuteAllowance = s.commute_allowance !== undefined ? s.commute_allowance : staff.commute_allowance;
+            const qualAllowance = s.qualification_allowance !== undefined ? s.qualification_allowance : staff.qualification_allowance;
+            const otherAllowance = s.other_allowance !== undefined ? s.other_allowance : staff.other_allowance;
 
             await runSQL(
-                'UPDATE staff SET pay_type = $1, hourly_rate = $2, monthly_salary = $3 WHERE id = $4',
-                [payType, hourlyRate, monthlySalary, staff.id]
+                'UPDATE staff SET pay_type = $1, hourly_rate = $2, monthly_salary = $3, commute_allowance = $4, qualification_allowance = $5, other_allowance = $6 WHERE id = $7',
+                [payType, hourlyRate, monthlySalary, commuteAllowance, qualAllowance, otherAllowance, staff.id]
             );
             updated++;
         }

@@ -54,11 +54,24 @@ async function initDB() {
         pay_type TEXT NOT NULL CHECK(pay_type IN ('hourly', 'monthly')),
         hourly_rate INTEGER DEFAULT 0,
         monthly_salary INTEGER DEFAULT 0,
+        commute_allowance INTEGER DEFAULT 0,
+        qualification_allowance INTEGER DEFAULT 0,
+        other_allowance INTEGER DEFAULT 0,
         is_active INTEGER DEFAULT 1,
         display_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+
+    // Add allowance columns to existing table (safe to run multiple times)
+    const alterQueries = [
+      'ALTER TABLE staff ADD COLUMN IF NOT EXISTS commute_allowance INTEGER DEFAULT 0',
+      'ALTER TABLE staff ADD COLUMN IF NOT EXISTS qualification_allowance INTEGER DEFAULT 0',
+      'ALTER TABLE staff ADD COLUMN IF NOT EXISTS other_allowance INTEGER DEFAULT 0',
+    ];
+    for (const q of alterQueries) {
+      try { await client.query(q); } catch (e) { /* column may already exist */ }
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS shift_requests (
