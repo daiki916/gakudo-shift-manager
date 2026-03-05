@@ -205,4 +205,46 @@ router.post('/staff/bulk-import', async (req, res) => {
     }
 });
 
+// Bulk update salary info (match by name)
+router.post('/staff/bulk-update-salary', async (req, res) => {
+    try {
+        const { staff_list } = req.body;
+        if (!Array.isArray(staff_list) || staff_list.length === 0) {
+            return res.status(400).json({ error: 'staff_list（配列）は必須です' });
+        }
+
+        const existing = await queryAll('SELECT * FROM staff WHERE org_id = $1', [ORG_ID]);
+        let updated = 0;
+        let notFound = 0;
+
+        for (const s of staff_list) {
+            const name = (s.name || '').trim();
+            if (!name) continue;
+
+            const staff = existing.find(e => e.name.trim() === name);
+            if (!staff) { notFound++; continue; }
+
+            const payType = s.pay_type || staff.pay_type;
+            const hourlyRate = s.hourly_rate !== undefined ? s.hourly_rate : staff.hourly_rate;
+            const monthlySalary = s.monthly_salary !== undefined ? s.monthly_salary : staff.monthly_salary;
+
+            await runSQL(
+                'UPDATE staff SET pay_type = $1, hourly_rate = $2, monthly_salary = $3 WHERE id = $4',
+                [payType, hourlyRate, monthlySalary, staff.id]
+            );
+            updated++;
+        }
+
+        res.json({
+            success: true,
+            message: `${updated}名の給与情報を更新しました（未一致: ${notFound}名）`,
+            updated,
+            notFound
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: '給与情報の一括更新に失敗しました' });
+    }
+});
+
 module.exports = router;
