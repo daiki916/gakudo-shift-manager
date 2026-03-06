@@ -1,73 +1,59 @@
 /**
  * LINE WORKS API v2 authentication using Service Account (JWT)
- * Uses manual JWT construction with crypto.sign() to avoid OpenSSL PEM parser issues
+ *
+ * Private Key の読み込み優先順位:
+ *   1. LINEWORKS_PRIVATE_KEY_FILE (Render Secret File パス)
+ *   2. LINEWORKS_PRIVATE_KEY_BASE64 (base64エンコード済み)
+ *   3. LINEWORKS_PRIVATE_KEY (生PEM文字列)
  */
 const https = require('https');
-const crypto = require('crypto');
+const fs = require('fs');
+const jwt = require('jsonwebtoken');
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
 /**
- * Get private key PEM string from environment variable.
+ * Get private key PEM string.
+ * Supports three sources (in priority order):
+ *   1. File path (Render Secret File)
+ *   2. Base64-encoded env var
+ *   3. Raw PEM env var
  */
 function getPrivateKeyPem() {
-    let pem;
-
-    const b64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64;
-    if (b64) {
-        pem = Buffer.from(b64, 'base64').toString('utf8');
-        console.log('🔑 Private key loaded from base64 env var, length:', pem.length);
-    } else {
-        const raw = process.env.LINEWORKS_PRIVATE_KEY;
-        if (raw) {
-            pem = raw.replace(/\\n/g, '\n');
-            console.log('🔑 Private key loaded from raw env var (fallback)');
-        } else {
-            throw new Error('No private key configured');
+    // 1. Secret File (most reliable on Render)
+    const keyFilePath = process.env.LINEWORKS_PRIVATE_KEY_FILE;
+    if (keyFilePath) {
+        try {
+            const pem = fs.readFileSync(keyFilePath, 'utf8').trim();
+            console.log('🔑 Private key loaded from file:', keyFilePath, 'length:', pem.length);
+            return pem;
+        } catch (err) {
+            console.error('⚠️ Failed to read key file:', keyFilePath, err.message);
         }
     }
 
-    // Clean up: strip \r, trim whitespace
-    pem = pem.replace(/\r/g, '').trim();
-    return pem;
+    // 2. Base64-encoded (safe for env vars with no newline issues)
+    const b64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64;
+    if (b64) {
+        const pem = Buffer.from(b64, 'base64').toString('utf8').replace(/\r/g, '').trim();
+        console.log('🔑 Private key loaded from base64 env var, length:', pem.length);
+        return pem;
+    }
+
+    // 3. Raw PEM string (fallback)
+    const raw = process.env.LINEWORKS_PRIVATE_KEY;
+    if (raw) {
+        const pem = raw.replace(/\\n/g, '\n').replace(/\r/g, '').trim();
+        console.log('🔑 Private key loaded from raw env var (fallback)');
+        return pem;
+    }
+
+    throw new Error('No private key configured. Set LINEWORKS_PRIVATE_KEY_FILE, LINEWORKS_PRIVATE_KEY_BASE64, or LINEWORKS_PRIVATE_KEY');
 }
 
 /**
- * Extract DER bytes from PEM and create key using DER format
- */
-function getPrivateKeyObject() {
-    const pem = getPrivateKeyPem();
-
-    // Extract base64 body from PEM (strip header/footer/newlines)
-    const b64Body = pem
-        .replace(/-----BEGIN .*-----/, '')
-        .replace(/-----END .*-----/, '')
-        .replace(/\s/g, '');
-
-    const derBuffer = Buffer.from(b64Body, 'base64');
-    console.log('🔑 DER key extracted, bytes:', derBuffer.length);
-
-    // Create key from DER format (bypasses PEM parser)
-    return crypto.createPrivateKey({
-        key: derBuffer,
-        format: 'der',
-        type: 'pkcs8',
-    });
-}
-
-/**
- * Base64url encode
- */
-function base64url(data) {
-    const b64 = (typeof data === 'string')
-        ? Buffer.from(data).toString('base64')
-        : data.toString('base64');
-    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-/**
- * Create JWT for Service Account authentication
+ * Create JWT for Service Account authentication using jsonwebtoken package
  */
 function createJWT() {
     const clientId = process.env.LINEWORKS_CLIENT_ID;
@@ -77,21 +63,22 @@ function createJWT() {
         throw new Error('LINE WORKS credentials not configured');
     }
 
+    const pem = getPrivateKeyPem();
     const now = Math.floor(Date.now() / 1000);
-    const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-    const payload = base64url(JSON.stringify({
-        iss: clientId,
-        sub: serviceAccountId,
-        iat: now,
-        exp: now + 3600,
-    }));
 
-    const signingInput = `${header}.${payload}`;
-    const key = getPrivateKeyObject();
-    const signature = crypto.sign('sha256', Buffer.from(signingInput), key);
+    const token = jwt.sign(
+        {
+            iss: clientId,
+            sub: serviceAccountId,
+            iat: now,
+            exp: now + 3600,
+        },
+        pem,
+        { algorithm: 'RS256' }
+    );
 
-    console.log('✅ JWT signed successfully');
-    return `${signingInput}.${base64url(signature)}`;
+    console.log('✅ JWT signed successfully with jsonwebtoken');
+    return token;
 }
 
 /**
@@ -133,7 +120,7 @@ async function getAccessToken() {
                     const result = JSON.parse(data);
                     if (res.statusCode !== 200) {
                         console.error('LINE WORKS auth error:', res.statusCode, data);
-                        reject(new Error(`Auth failed: ${res.statusCode}`));
+                        reject(new Error(`Auth failed: ${res.statusCode} - ${data}`));
                         return;
                     }
                     cachedToken = result.access_token;
@@ -201,7 +188,7 @@ function isConfigured() {
         process.env.LINEWORKS_CLIENT_ID &&
         process.env.LINEWORKS_CLIENT_SECRET &&
         process.env.LINEWORKS_SERVICE_ACCOUNT &&
-        (process.env.LINEWORKS_PRIVATE_KEY_BASE64 || process.env.LINEWORKS_PRIVATE_KEY) &&
+        (process.env.LINEWORKS_PRIVATE_KEY_FILE || process.env.LINEWORKS_PRIVATE_KEY_BASE64 || process.env.LINEWORKS_PRIVATE_KEY) &&
         process.env.LINEWORKS_BOT_ID
     );
 }
