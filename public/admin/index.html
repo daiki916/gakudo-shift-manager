@@ -293,6 +293,16 @@
                     <input type="number" class="form-input" id="staff-other-allowance" placeholder="0">
                 </div>
             </div>
+            <div style="border-top: 1px solid var(--border); margin: 16px 0 12px; padding-top: 12px;">
+                <label
+                    style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: block;">💬
+                    LINE WORKS 連携</label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">LINE WORKS ユーザーID</label>
+                <input type="text" class="form-input" id="staff-lineworks-id" placeholder="例: user@domain">
+                <span style="font-size: 0.75rem; color: var(--text-muted);">BOTからシフト提出するためのID</span>
+            </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeModal('staff-modal')">キャンセル</button>
                 <button class="btn btn-primary" onclick="saveStaff()">保存</button>
@@ -595,6 +605,7 @@
             document.getElementById('staff-commute').value = '';
             document.getElementById('staff-qualification').value = '';
             document.getElementById('staff-other-allowance').value = '';
+            document.getElementById('staff-lineworks-id').value = '';
             togglePayFields();
             openModal('staff-modal');
         }
@@ -612,6 +623,7 @@
             document.getElementById('staff-commute').value = s.commute_allowance || '';
             document.getElementById('staff-qualification').value = s.qualification_allowance || '';
             document.getElementById('staff-other-allowance').value = s.other_allowance || '';
+            document.getElementById('staff-lineworks-id').value = s.lineworks_id || '';
             togglePayFields();
             openModal('staff-modal');
         }
@@ -633,6 +645,7 @@
                 qualification_allowance: parseInt(document.getElementById('staff-qualification').value) || 0,
                 other_allowance: parseInt(document.getElementById('staff-other-allowance').value) || 0,
                 club_id: parseInt(document.getElementById('staff-club-id').value) || 1,
+                lineworks_id: document.getElementById('staff-lineworks-id').value.trim() || null,
             };
 
             if (!data.name) { showToast('名前を入力してください', 'error'); return; }

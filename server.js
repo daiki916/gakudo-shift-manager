@@ -35,9 +35,11 @@ async function startServer() {
     // API Routes
     const staffRouter = require('./routes/staff');
     const shiftsRouter = require('./routes/shifts');
+    const lineworksRouter = require('./routes/lineworks');
 
     app.use('/api', staffRouter);
     app.use('/api', shiftsRouter);
+    app.use('/api', lineworksRouter);
 
     // Server info API (for share tab to get base URL)
     app.get('/api/server-info', (req, res) => {

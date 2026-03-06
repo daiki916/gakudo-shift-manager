@@ -104,7 +104,7 @@ router.post('/staff', async (req, res) => {
 // Update staff
 router.put('/staff/:id', async (req, res) => {
     try {
-        const { name, pay_type, hourly_rate, monthly_salary, commute_allowance, qualification_allowance, other_allowance, is_active, display_order, club_id } = req.body;
+        const { name, pay_type, hourly_rate, monthly_salary, commute_allowance, qualification_allowance, other_allowance, is_active, display_order, club_id, lineworks_id } = req.body;
         const staff = await queryOne('SELECT * FROM staff WHERE id = $1 AND org_id = $2', [parseInt(req.params.id), ORG_ID]);
         if (!staff) return res.status(404).json({ error: 'スタッフが見つかりません' });
 
@@ -122,6 +122,7 @@ router.put('/staff/:id', async (req, res) => {
         if (is_active !== undefined) { updates.push(`is_active = $${paramIdx++}`); params.push(is_active); }
         if (display_order !== undefined) { updates.push(`display_order = $${paramIdx++}`); params.push(display_order); }
         if (club_id !== undefined) { updates.push(`club_id = $${paramIdx++}`); params.push(club_id); }
+        if (lineworks_id !== undefined) { updates.push(`lineworks_id = $${paramIdx++}`); params.push(lineworks_id || null); }
 
         if (updates.length > 0) {
             params.push(parseInt(req.params.id), ORG_ID);

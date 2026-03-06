@@ -68,6 +68,7 @@ async function initDB() {
       'ALTER TABLE staff ADD COLUMN IF NOT EXISTS commute_allowance INTEGER DEFAULT 0',
       'ALTER TABLE staff ADD COLUMN IF NOT EXISTS qualification_allowance INTEGER DEFAULT 0',
       'ALTER TABLE staff ADD COLUMN IF NOT EXISTS other_allowance INTEGER DEFAULT 0',
+      'ALTER TABLE staff ADD COLUMN IF NOT EXISTS lineworks_id TEXT DEFAULT NULL',
     ];
     for (const q of alterQueries) {
       try { await client.query(q); } catch (e) { /* column may already exist */ }
