@@ -33,7 +33,28 @@ function createJWT() {
     const signingInput = `${base64Header}.${base64Payload}`;
 
     // Handle private key - may have escaped newlines from env var
-    const key = privateKey.replace(/\\n/g, '\n');
+    // Replace literal \n strings with actual newlines
+    let key = privateKey.replace(/\\n/g, '\n');
+
+    // If the key doesn't start with -----BEGIN, try to reconstruct it
+    if (!key.startsWith('-----BEGIN')) {
+        console.error('⚠️ Private key does not start with -----BEGIN, first 50 chars:', key.substring(0, 50));
+    }
+
+    // Ensure the key is properly formatted as PEM
+    // Some env var systems strip newlines, so reconstruct if needed
+    if (!key.includes('\n')) {
+        // Key is all on one line - try to reconstruct PEM format
+        const keyBody = key
+            .replace('-----BEGIN PRIVATE KEY-----', '')
+            .replace('-----END PRIVATE KEY-----', '')
+            .trim();
+        const chunks = keyBody.match(/.{1,64}/g) || [];
+        key = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
+    }
+
+    console.log('🔑 Key format check - starts with:', key.substring(0, 30), '... length:', key.length);
+
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(signingInput);
     const signature = sign.sign(key, 'base64url');
