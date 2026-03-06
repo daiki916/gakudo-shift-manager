@@ -419,4 +419,57 @@ router.get('/lineworks/status', (req, res) => {
     });
 });
 
+// ============================================================
+// Diagnostic endpoint - test JWT signing and token acquisition
+// ============================================================
+router.get('/lineworks/debug', async (req, res) => {
+    const { getAccessToken } = require('../services/lineworks-auth');
+    const results = {
+        env: {
+            has_client_id: !!process.env.LINEWORKS_CLIENT_ID,
+            has_client_secret: !!process.env.LINEWORKS_CLIENT_SECRET,
+            has_service_account: !!process.env.LINEWORKS_SERVICE_ACCOUNT,
+            has_private_key_file: !!process.env.LINEWORKS_PRIVATE_KEY_FILE,
+            has_private_key_base64: !!process.env.LINEWORKS_PRIVATE_KEY_BASE64,
+            has_private_key_raw: !!process.env.LINEWORKS_PRIVATE_KEY,
+            private_key_base64_length: (process.env.LINEWORKS_PRIVATE_KEY_BASE64 || '').length,
+            has_bot_id: !!process.env.LINEWORKS_BOT_ID,
+        },
+        jwt_sign: null,
+        access_token: null,
+    };
+
+    // Test JWT signing
+    try {
+        const jwt = require('jsonwebtoken');
+        const fs = require('fs');
+        let pem;
+        if (process.env.LINEWORKS_PRIVATE_KEY_FILE) {
+            pem = fs.readFileSync(process.env.LINEWORKS_PRIVATE_KEY_FILE, 'utf8').trim();
+            results.jwt_sign = { key_source: 'file', pem_length: pem.length };
+        } else if (process.env.LINEWORKS_PRIVATE_KEY_BASE64) {
+            pem = Buffer.from(process.env.LINEWORKS_PRIVATE_KEY_BASE64, 'base64').toString('utf8').trim();
+            results.jwt_sign = { key_source: 'base64', pem_length: pem.length, pem_start: pem.substring(0, 30), pem_end: pem.substring(pem.length - 30) };
+        }
+
+        if (pem) {
+            const token = jwt.sign({ test: true }, pem, { algorithm: 'RS256' });
+            results.jwt_sign.success = true;
+            results.jwt_sign.token_length = token.length;
+        }
+    } catch (err) {
+        results.jwt_sign = { success: false, error: err.message };
+    }
+
+    // Test access token acquisition
+    try {
+        const token = await getAccessToken();
+        results.access_token = { success: true, token_preview: token ? token.substring(0, 10) + '...' : null };
+    } catch (err) {
+        results.access_token = { success: false, error: err.message };
+    }
+
+    res.json(results);
+});
+
 module.exports = router;
