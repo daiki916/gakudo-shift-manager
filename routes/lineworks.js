@@ -416,6 +416,7 @@ router.get('/lineworks/status', (req, res) => {
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
         pending_confirmations: pendingConfirmations.size,
+        version: 'f336acd',
     });
 });
 
