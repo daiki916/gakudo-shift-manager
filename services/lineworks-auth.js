@@ -67,8 +67,17 @@ function createJWT() {
     const pem = getPrivateKeyPem();
     const now = Math.floor(Date.now() / 1000);
 
-    // Convert PEM to KeyObject for compatibility with all Node.js versions
-    const privateKey = crypto.createPrivateKey(pem);
+    // Extract DER from PEM and create KeyObject (bypasses OpenSSL PEM parser)
+    const b64Body = pem
+        .replace(/-----BEGIN .*-----/, '')
+        .replace(/-----END .*-----/, '')
+        .replace(/\s/g, '');
+    const derBuffer = Buffer.from(b64Body, 'base64');
+    const privateKey = crypto.createPrivateKey({
+        key: derBuffer,
+        format: 'der',
+        type: 'pkcs8',
+    });
 
     const token = jwt.sign(
         {

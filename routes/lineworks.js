@@ -416,7 +416,7 @@ router.get('/lineworks/status', (req, res) => {
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
         pending_confirmations: pendingConfirmations.size,
-        version: 'f336acd',
+        version: 'der-fix-v2',
     });
 });
 
@@ -455,7 +455,9 @@ router.get('/lineworks/debug', async (req, res) => {
         }
 
         if (pem) {
-            const privateKey = crypto.createPrivateKey(pem);
+            const b64Body = pem.replace(/-----BEGIN .*-----/, '').replace(/-----END .*-----/, '').replace(/\s/g, '');
+            const derBuffer = Buffer.from(b64Body, 'base64');
+            const privateKey = crypto.createPrivateKey({ key: derBuffer, format: 'der', type: 'pkcs8' });
             const token = jwt.sign({ test: true }, privateKey, { algorithm: 'RS256' });
             results.jwt_sign.success = true;
             results.jwt_sign.token_length = token.length;
