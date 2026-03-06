@@ -430,9 +430,11 @@ router.get('/lineworks/debug', async (req, res) => {
             has_client_id: !!process.env.LINEWORKS_CLIENT_ID,
             has_client_secret: !!process.env.LINEWORKS_CLIENT_SECRET,
             has_service_account: !!process.env.LINEWORKS_SERVICE_ACCOUNT,
+            has_private_key_der: !!process.env.LINEWORKS_PRIVATE_KEY_DER,
             has_private_key_file: !!process.env.LINEWORKS_PRIVATE_KEY_FILE,
             has_private_key_base64: !!process.env.LINEWORKS_PRIVATE_KEY_BASE64,
             has_private_key_raw: !!process.env.LINEWORKS_PRIVATE_KEY,
+            private_key_der_length: (process.env.LINEWORKS_PRIVATE_KEY_DER || '').length,
             private_key_base64_length: (process.env.LINEWORKS_PRIVATE_KEY_BASE64 || '').length,
             has_bot_id: !!process.env.LINEWORKS_BOT_ID,
         },
@@ -444,10 +446,14 @@ router.get('/lineworks/debug', async (req, res) => {
     try {
         const crypto = require('crypto');
         const fs = require('fs');
+        let derBuffer = null;
         let pem;
         let keySource = 'none';
 
-        if (process.env.LINEWORKS_PRIVATE_KEY_FILE) {
+        if (process.env.LINEWORKS_PRIVATE_KEY_DER) {
+            derBuffer = Buffer.from(process.env.LINEWORKS_PRIVATE_KEY_DER, 'base64');
+            keySource = 'der_base64';
+        } else if (process.env.LINEWORKS_PRIVATE_KEY_FILE) {
             pem = fs.readFileSync(process.env.LINEWORKS_PRIVATE_KEY_FILE, 'utf8').trim();
             keySource = 'file';
         } else if (process.env.LINEWORKS_PRIVATE_KEY_BASE64) {
@@ -461,7 +467,7 @@ router.get('/lineworks/debug', async (req, res) => {
         if (pem) {
             const lines = pem.split('\n');
             const b64Body = pem.replace(/-----BEGIN .*-----/, '').replace(/-----END .*-----/, '').replace(/\s/g, '');
-            const derBuffer = Buffer.from(b64Body, 'base64');
+            derBuffer = Buffer.from(b64Body, 'base64');
 
             const rawB64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64 || '';
             results.jwt_sign = {
@@ -478,8 +484,20 @@ router.get('/lineworks/debug', async (req, res) => {
                 node_version: process.version,
                 openssl_version: process.versions.openssl,
             };
+        } else if (derBuffer) {
+            const rawDerB64 = process.env.LINEWORKS_PRIVATE_KEY_DER || '';
+            results.jwt_sign = {
+                key_source: keySource,
+                der_bytes: derBuffer.length,
+                der_first_bytes: derBuffer.slice(0, 10).toString('hex'),
+                raw_der_b64_first20: rawDerB64.substring(0, 20),
+                raw_der_b64_last20: rawDerB64.substring(rawDerB64.length - 20),
+                node_version: process.version,
+                openssl_version: process.versions.openssl,
+            };
+        }
 
-            // Try DER PKCS8
+        if (derBuffer) {
             try {
                 const key = crypto.createPrivateKey({ key: derBuffer, format: 'der', type: 'pkcs8' });
                 const sig = crypto.sign('sha256', Buffer.from('test'), key);
@@ -487,8 +505,9 @@ router.get('/lineworks/debug', async (req, res) => {
             } catch (e) {
                 results.jwt_sign.der_pkcs8 = { success: false, error: e.message };
             }
+        }
 
-            // Try PEM directly
+        if (pem) {
             try {
                 const key = crypto.createPrivateKey(pem);
                 const sig = crypto.sign('sha256', Buffer.from('test'), key);
@@ -497,8 +516,15 @@ router.get('/lineworks/debug', async (req, res) => {
                 results.jwt_sign.pem_direct = { success: false, error: e.message };
             }
         }
+
+        if (results.jwt_sign) {
+            results.jwt_sign.success = !!(
+                (results.jwt_sign.der_pkcs8 && results.jwt_sign.der_pkcs8.success) ||
+                (results.jwt_sign.pem_direct && results.jwt_sign.pem_direct.success)
+            );
+        }
     } catch (err) {
-        results.jwt_sign = { error: err.message };
+        results.jwt_sign = { success: false, error: err.message };
     }
 
     // Test access token acquisition
