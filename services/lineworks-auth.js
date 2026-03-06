@@ -2,10 +2,31 @@
  * LINE WORKS API v2 authentication using Service Account (JWT)
  */
 const https = require('https');
-const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
+
+/**
+ * Get private key from environment variable.
+ * Priority: LINEWORKS_PRIVATE_KEY_BASE64 (base64 encoded) > LINEWORKS_PRIVATE_KEY (raw)
+ */
+function getPrivateKey() {
+    const b64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64;
+    if (b64) {
+        const decoded = Buffer.from(b64, 'base64').toString('utf8');
+        console.log('🔑 Private key loaded from base64 env var, length:', decoded.length);
+        return decoded;
+    }
+
+    const raw = process.env.LINEWORKS_PRIVATE_KEY;
+    if (raw) {
+        console.log('🔑 Private key loaded from raw env var (fallback)');
+        return raw.replace(/\\n/g, '\n');
+    }
+
+    throw new Error('No private key configured (set LINEWORKS_PRIVATE_KEY_BASE64 or LINEWORKS_PRIVATE_KEY)');
+}
 
 /**
  * Create JWT for Service Account authentication
@@ -13,14 +34,12 @@ let tokenExpiresAt = 0;
 function createJWT() {
     const clientId = process.env.LINEWORKS_CLIENT_ID;
     const serviceAccountId = process.env.LINEWORKS_SERVICE_ACCOUNT;
-    const privateKey = process.env.LINEWORKS_PRIVATE_KEY;
 
-    if (!clientId || !serviceAccountId || !privateKey) {
-        throw new Error('LINE WORKS credentials not configured');
+    if (!clientId || !serviceAccountId) {
+        throw new Error('LINE WORKS credentials not configured (CLIENT_ID or SERVICE_ACCOUNT missing)');
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const header = { alg: 'RS256', typ: 'JWT' };
     const payload = {
         iss: clientId,
         sub: serviceAccountId,
@@ -28,38 +47,8 @@ function createJWT() {
         exp: now + 3600, // 1 hour
     };
 
-    const base64Header = Buffer.from(JSON.stringify(header)).toString('base64url');
-    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    const signingInput = `${base64Header}.${base64Payload}`;
-
-    // Handle private key - may have escaped newlines from env var
-    // Replace literal \n strings with actual newlines
-    let key = privateKey.replace(/\\n/g, '\n');
-
-    // If the key doesn't start with -----BEGIN, try to reconstruct it
-    if (!key.startsWith('-----BEGIN')) {
-        console.error('⚠️ Private key does not start with -----BEGIN, first 50 chars:', key.substring(0, 50));
-    }
-
-    // Ensure the key is properly formatted as PEM
-    // Some env var systems strip newlines, so reconstruct if needed
-    if (!key.includes('\n')) {
-        // Key is all on one line - try to reconstruct PEM format
-        const keyBody = key
-            .replace('-----BEGIN PRIVATE KEY-----', '')
-            .replace('-----END PRIVATE KEY-----', '')
-            .trim();
-        const chunks = keyBody.match(/.{1,64}/g) || [];
-        key = '-----BEGIN PRIVATE KEY-----\n' + chunks.join('\n') + '\n-----END PRIVATE KEY-----\n';
-    }
-
-    console.log('🔑 Key format check - starts with:', key.substring(0, 30), '... length:', key.length);
-
-    const sign = crypto.createSign('RSA-SHA256');
-    sign.update(signingInput);
-    const signature = sign.sign(key, 'base64url');
-
-    return `${signingInput}.${signature}`;
+    const privateKey = getPrivateKey();
+    return jwt.sign(payload, privateKey, { algorithm: 'RS256' });
 }
 
 /**
@@ -74,10 +63,10 @@ async function getAccessToken() {
     const clientId = process.env.LINEWORKS_CLIENT_ID;
     const clientSecret = process.env.LINEWORKS_CLIENT_SECRET;
 
-    const jwt = createJWT();
+    const assertion = createJWT();
 
     const body = new URLSearchParams({
-        assertion: jwt,
+        assertion: assertion,
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         client_id: clientId,
         client_secret: clientSecret,
@@ -169,7 +158,7 @@ function isConfigured() {
         process.env.LINEWORKS_CLIENT_ID &&
         process.env.LINEWORKS_CLIENT_SECRET &&
         process.env.LINEWORKS_SERVICE_ACCOUNT &&
-        process.env.LINEWORKS_PRIVATE_KEY &&
+        (process.env.LINEWORKS_PRIVATE_KEY_BASE64 || process.env.LINEWORKS_PRIVATE_KEY) &&
         process.env.LINEWORKS_BOT_ID
     );
 }
