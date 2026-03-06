@@ -416,7 +416,7 @@ router.get('/lineworks/status', (req, res) => {
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
         pending_confirmations: pendingConfirmations.size,
-        version: 'diag-v3',
+        version: 'diag-v4',
     });
 });
 
@@ -463,6 +463,7 @@ router.get('/lineworks/debug', async (req, res) => {
             const b64Body = pem.replace(/-----BEGIN .*-----/, '').replace(/-----END .*-----/, '').replace(/\s/g, '');
             const derBuffer = Buffer.from(b64Body, 'base64');
 
+            const rawB64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64 || '';
             results.jwt_sign = {
                 key_source: keySource,
                 pem_length: pem.length,
@@ -471,6 +472,9 @@ router.get('/lineworks/debug', async (req, res) => {
                 pem_last_line: lines[lines.length - 1],
                 b64_body_length: b64Body.length,
                 der_bytes: derBuffer.length,
+                der_first_bytes: derBuffer.slice(0, 10).toString('hex'),
+                raw_b64_first20: rawB64.substring(0, 20),
+                raw_b64_last20: rawB64.substring(rawB64.length - 20),
                 node_version: process.version,
                 openssl_version: process.versions.openssl,
             };
