@@ -416,7 +416,7 @@ router.get('/lineworks/status', (req, res) => {
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
         pending_confirmations: pendingConfirmations.size,
-        version: 'der-fix-v2',
+        version: 'diag-v3',
     });
 });
 
@@ -440,30 +440,61 @@ router.get('/lineworks/debug', async (req, res) => {
         access_token: null,
     };
 
-    // Test JWT signing
+    // Detailed key diagnostics
     try {
-        const jwt = require('jsonwebtoken');
         const crypto = require('crypto');
         const fs = require('fs');
         let pem;
+        let keySource = 'none';
+
         if (process.env.LINEWORKS_PRIVATE_KEY_FILE) {
             pem = fs.readFileSync(process.env.LINEWORKS_PRIVATE_KEY_FILE, 'utf8').trim();
-            results.jwt_sign = { key_source: 'file', pem_length: pem.length };
+            keySource = 'file';
         } else if (process.env.LINEWORKS_PRIVATE_KEY_BASE64) {
-            pem = Buffer.from(process.env.LINEWORKS_PRIVATE_KEY_BASE64, 'base64').toString('utf8').trim();
-            results.jwt_sign = { key_source: 'base64', pem_length: pem.length, pem_start: pem.substring(0, 30), pem_end: pem.substring(pem.length - 30) };
+            pem = Buffer.from(process.env.LINEWORKS_PRIVATE_KEY_BASE64, 'base64').toString('utf8').replace(/\r/g, '').trim();
+            keySource = 'base64';
+        } else if (process.env.LINEWORKS_PRIVATE_KEY) {
+            pem = process.env.LINEWORKS_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/\r/g, '').trim();
+            keySource = 'raw';
         }
 
         if (pem) {
+            const lines = pem.split('\n');
             const b64Body = pem.replace(/-----BEGIN .*-----/, '').replace(/-----END .*-----/, '').replace(/\s/g, '');
             const derBuffer = Buffer.from(b64Body, 'base64');
-            const privateKey = crypto.createPrivateKey({ key: derBuffer, format: 'der', type: 'pkcs8' });
-            const token = jwt.sign({ test: true }, privateKey, { algorithm: 'RS256' });
-            results.jwt_sign.success = true;
-            results.jwt_sign.token_length = token.length;
+
+            results.jwt_sign = {
+                key_source: keySource,
+                pem_length: pem.length,
+                pem_lines: lines.length,
+                pem_first_line: lines[0],
+                pem_last_line: lines[lines.length - 1],
+                b64_body_length: b64Body.length,
+                der_bytes: derBuffer.length,
+                node_version: process.version,
+                openssl_version: process.versions.openssl,
+            };
+
+            // Try DER PKCS8
+            try {
+                const key = crypto.createPrivateKey({ key: derBuffer, format: 'der', type: 'pkcs8' });
+                const sig = crypto.sign('sha256', Buffer.from('test'), key);
+                results.jwt_sign.der_pkcs8 = { success: true, sig_length: sig.length };
+            } catch (e) {
+                results.jwt_sign.der_pkcs8 = { success: false, error: e.message };
+            }
+
+            // Try PEM directly
+            try {
+                const key = crypto.createPrivateKey(pem);
+                const sig = crypto.sign('sha256', Buffer.from('test'), key);
+                results.jwt_sign.pem_direct = { success: true, sig_length: sig.length };
+            } catch (e) {
+                results.jwt_sign.pem_direct = { success: false, error: e.message };
+            }
         }
     } catch (err) {
-        results.jwt_sign = { success: false, error: err.message };
+        results.jwt_sign = { error: err.message };
     }
 
     // Test access token acquisition
