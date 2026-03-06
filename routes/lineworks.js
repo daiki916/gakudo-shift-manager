@@ -442,6 +442,7 @@ router.get('/lineworks/debug', async (req, res) => {
     // Test JWT signing
     try {
         const jwt = require('jsonwebtoken');
+        const crypto = require('crypto');
         const fs = require('fs');
         let pem;
         if (process.env.LINEWORKS_PRIVATE_KEY_FILE) {
@@ -453,7 +454,8 @@ router.get('/lineworks/debug', async (req, res) => {
         }
 
         if (pem) {
-            const token = jwt.sign({ test: true }, pem, { algorithm: 'RS256' });
+            const privateKey = crypto.createPrivateKey(pem);
+            const token = jwt.sign({ test: true }, privateKey, { algorithm: 'RS256' });
             results.jwt_sign.success = true;
             results.jwt_sign.token_length = token.length;
         }

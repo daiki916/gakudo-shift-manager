@@ -8,6 +8,7 @@
  */
 const https = require('https');
 const fs = require('fs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 let cachedToken = null;
@@ -66,6 +67,9 @@ function createJWT() {
     const pem = getPrivateKeyPem();
     const now = Math.floor(Date.now() / 1000);
 
+    // Convert PEM to KeyObject for compatibility with all Node.js versions
+    const privateKey = crypto.createPrivateKey(pem);
+
     const token = jwt.sign(
         {
             iss: clientId,
@@ -73,7 +77,7 @@ function createJWT() {
             iat: now,
             exp: now + 3600,
         },
-        pem,
+        privateKey,
         { algorithm: 'RS256' }
     );
 
