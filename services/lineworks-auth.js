@@ -30,7 +30,12 @@ function getPrivateKey() {
         }
     }
 
-    console.log('🔑 Key starts with:', pem.substring(0, 27));
+    // Strip Windows CRLF line endings (\r) and trim whitespace
+    pem = pem.replace(/\r/g, '').trim();
+    // Ensure trailing newline for PEM format
+    if (!pem.endsWith('\n')) pem += '\n';
+
+    console.log('🔑 Key starts with:', pem.substring(0, 27), 'cleaned length:', pem.length);
     return crypto.createPrivateKey(pem);
 }
 
