@@ -1,19 +1,17 @@
 /**
  * LINE WORKS API v2 authentication using Service Account (JWT)
+ * Uses manual JWT construction with crypto.sign() to avoid OpenSSL PEM parser issues
  */
 const https = require('https');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
 /**
- * Get private key from environment variable.
- * Priority: LINEWORKS_PRIVATE_KEY_BASE64 (base64 encoded) > LINEWORKS_PRIVATE_KEY (raw)
- * Returns a crypto.KeyObject for jsonwebtoken v9+ compatibility.
+ * Get private key PEM string from environment variable.
  */
-function getPrivateKey() {
+function getPrivateKeyPem() {
     let pem;
 
     const b64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64;
@@ -26,17 +24,46 @@ function getPrivateKey() {
             pem = raw.replace(/\\n/g, '\n');
             console.log('🔑 Private key loaded from raw env var (fallback)');
         } else {
-            throw new Error('No private key configured (set LINEWORKS_PRIVATE_KEY_BASE64 or LINEWORKS_PRIVATE_KEY)');
+            throw new Error('No private key configured');
         }
     }
 
-    // Strip Windows CRLF line endings (\r) and trim whitespace
+    // Clean up: strip \r, trim whitespace
     pem = pem.replace(/\r/g, '').trim();
-    // Ensure trailing newline for PEM format
-    if (!pem.endsWith('\n')) pem += '\n';
+    return pem;
+}
 
-    console.log('🔑 Key starts with:', pem.substring(0, 27), 'cleaned length:', pem.length);
-    return crypto.createPrivateKey(pem);
+/**
+ * Extract DER bytes from PEM and create key using DER format
+ */
+function getPrivateKeyObject() {
+    const pem = getPrivateKeyPem();
+
+    // Extract base64 body from PEM (strip header/footer/newlines)
+    const b64Body = pem
+        .replace(/-----BEGIN .*-----/, '')
+        .replace(/-----END .*-----/, '')
+        .replace(/\s/g, '');
+
+    const derBuffer = Buffer.from(b64Body, 'base64');
+    console.log('🔑 DER key extracted, bytes:', derBuffer.length);
+
+    // Create key from DER format (bypasses PEM parser)
+    return crypto.createPrivateKey({
+        key: derBuffer,
+        format: 'der',
+        type: 'pkcs8',
+    });
+}
+
+/**
+ * Base64url encode
+ */
+function base64url(data) {
+    const b64 = (typeof data === 'string')
+        ? Buffer.from(data).toString('base64')
+        : data.toString('base64');
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
@@ -47,19 +74,24 @@ function createJWT() {
     const serviceAccountId = process.env.LINEWORKS_SERVICE_ACCOUNT;
 
     if (!clientId || !serviceAccountId) {
-        throw new Error('LINE WORKS credentials not configured (CLIENT_ID or SERVICE_ACCOUNT missing)');
+        throw new Error('LINE WORKS credentials not configured');
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const payload = {
+    const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+    const payload = base64url(JSON.stringify({
         iss: clientId,
         sub: serviceAccountId,
         iat: now,
-        exp: now + 3600, // 1 hour
-    };
+        exp: now + 3600,
+    }));
 
-    const privateKey = getPrivateKey();
-    return jwt.sign(payload, privateKey, { algorithm: 'RS256' });
+    const signingInput = `${header}.${payload}`;
+    const key = getPrivateKeyObject();
+    const signature = crypto.sign('sha256', Buffer.from(signingInput), key);
+
+    console.log('✅ JWT signed successfully');
+    return `${signingInput}.${base64url(signature)}`;
 }
 
 /**
