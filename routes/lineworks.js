@@ -416,13 +416,6 @@ router.get('/lineworks/status', (req, res) => {
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
         pending_confirmations: pendingConfirmations.size,
-        env_check: {
-            client_id: !!process.env.LINEWORKS_CLIENT_ID,
-            client_secret: !!process.env.LINEWORKS_CLIENT_SECRET,
-            service_account: !!process.env.LINEWORKS_SERVICE_ACCOUNT,
-            private_key: !!process.env.LINEWORKS_PRIVATE_KEY,
-            bot_id: !!process.env.LINEWORKS_BOT_ID,
-        }
     });
 });
 
