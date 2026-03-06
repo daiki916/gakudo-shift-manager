@@ -1,12 +1,65 @@
 /**
  * LINE WORKS Bot webhook endpoint
  * Receives messages from staff, parses with Gemini, registers shifts
+ * 
+ * Flow:
+ * 1. First message → send usage guide
+ * 2. Shift message → parse with Gemini → show confirmation → wait for OK
+ * 3. "OK" / "はい" → register the pending shift
+ * 4. "キャンセル" → cancel
  */
 const express = require('express');
 const router = express.Router();
 const { callGemini } = require('../services/gemini');
 const { sendMessage, isConfigured } = require('../services/lineworks-auth');
 const { queryAll, queryOne, runSQL, insertReturningId, ORG_ID } = require('../database');
+
+// ============================================================
+// In-memory state for pending confirmations
+// Map<userId, { parsed, staff, expiresAt }>
+// ============================================================
+const pendingConfirmations = new Map();
+
+// Clean up expired confirmations every 10 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of pendingConfirmations) {
+        if (now > val.expiresAt) pendingConfirmations.delete(key);
+    }
+}, 600000);
+
+// ============================================================
+// Welcome / Usage Guide
+// ============================================================
+const WELCOME_MESSAGE = `📋 シフト管理BOTへようこそ！
+
+以下のメッセージでシフト希望を提出できます。
+
+━━━━━━━━━━━━━━━━
+🕐 シフト登録
+━━━━━━━━━━━━━━━━
+「3/10は10時から17時」
+「来週月曜は9:30〜16:00」
+「3/10〜3/14は毎日10時から17時」
+
+━━━━━━━━━━━━━━━━
+🚫 お休み登録
+━━━━━━━━━━━━━━━━
+「3月15日はお休みです」
+「来週の水曜は休みます」
+
+━━━━━━━━━━━━━━━━
+📋 シフト確認
+━━━━━━━━━━━━━━━━
+「今月のシフトを確認」
+「3月のシフト確認して」
+
+━━━━━━━━━━━━━━━━
+📖 使い方を見る
+━━━━━━━━━━━━━━━━
+「ヘルプ」「使い方」
+
+自然な日本語でメッセージを送ってください！`;
 
 // ============================================================
 // Webhook callback from LINE WORKS
@@ -25,9 +78,21 @@ router.post('/lineworks/callback', async (req, res) => {
         }
 
         const userId = event.source?.userId;
-        const userMessage = event.content?.text;
+        const userMessage = event.content?.text?.trim();
 
         if (!userId || !userMessage) return;
+
+        // Check for help / welcome commands
+        if (isHelpMessage(userMessage)) {
+            await sendMessage(userId, WELCOME_MESSAGE);
+            return;
+        }
+
+        // Check for confirmation response (OK / cancel)
+        if (pendingConfirmations.has(userId)) {
+            await handleConfirmationResponse(userId, userMessage);
+            return;
+        }
 
         // Find staff by LINE WORKS user ID
         const staff = await findStaffByLineWorksId(userId);
@@ -36,35 +101,48 @@ router.post('/lineworks/callback', async (req, res) => {
         const parsed = await callGemini(userMessage);
         console.log('🤖 Gemini parsed:', JSON.stringify(parsed));
 
-        let replyText = '';
-
-        switch (parsed.action) {
-            case 'register':
-                replyText = await handleRegisterShifts(staff, parsed);
-                break;
-
-            case 'dayoff':
-                replyText = await handleDayOff(staff, parsed);
-                break;
-
-            case 'check':
-                replyText = await handleCheckShifts(staff, parsed);
-                break;
-
-            default:
-                replyText = parsed.message || 'すみません、シフト情報を読み取れませんでした。\n例: 「3/10は10時から17時」「来週月曜はお休み」';
+        // Handle check action immediately (no confirmation needed)
+        if (parsed.action === 'check') {
+            const replyText = await handleCheckShifts(staff, parsed);
+            await sendMessage(userId, replyText);
+            return;
         }
 
-        // Send reply back to user
-        await sendMessage(userId, replyText);
-        console.log('✅ Reply sent to', staff?.name || userId);
+        // Handle unknown action
+        if (parsed.action === 'unknown' || !parsed.action) {
+            await sendMessage(userId, parsed.message || '⚠️ シフト情報を読み取れませんでした。\n「ヘルプ」と送信すると使い方を確認できます。');
+            return;
+        }
+
+        // For register and dayoff: show confirmation first
+        if (parsed.action === 'register' || parsed.action === 'dayoff') {
+            if (!staff.id) {
+                await sendMessage(userId, `⚠️ あなたのLINE WORKSアカウントはまだスタッフに紐付けされていません。\n管理者に連絡してください。\nユーザーID: ${userId}`);
+                return;
+            }
+
+            // Store pending confirmation (expires in 10 minutes)
+            pendingConfirmations.set(userId, {
+                parsed,
+                staff,
+                expiresAt: Date.now() + 600000,
+            });
+
+            // Build confirmation message
+            const confirmMsg = buildConfirmationMessage(staff, parsed);
+            await sendMessage(userId, confirmMsg);
+            return;
+        }
+
+        // Fallback
+        await sendMessage(userId, '⚠️ メッセージを処理できませんでした。\n「ヘルプ」と送信すると使い方を確認できます。');
 
     } catch (err) {
         console.error('❌ Webhook processing error:', err);
-        // Try to send error message back
         try {
             const userId = req.body?.source?.userId;
             if (userId) {
+                pendingConfirmations.delete(userId);
                 await sendMessage(userId, '⚠️ 処理中にエラーが発生しました。もう一度お試しください。');
             }
         } catch (e) { /* ignore */ }
@@ -72,18 +150,101 @@ router.post('/lineworks/callback', async (req, res) => {
 });
 
 // ============================================================
+// Helper: detect help/welcome message
+// ============================================================
+function isHelpMessage(msg) {
+    const helpKeywords = ['ヘルプ', 'へるぷ', 'help', '使い方', 'つかいかた', '初めまして', 'はじめまして', 'こんにちは', 'こんばんは'];
+    return helpKeywords.some(k => msg.toLowerCase().includes(k));
+}
+
+// ============================================================
+// Build confirmation message
+// ============================================================
+function buildConfirmationMessage(staff, parsed) {
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+    let msg = `📝 ${staff.name}さん、以下の内容で登録します。\n\n`;
+
+    if (parsed.action === 'register') {
+        msg += '【シフト希望】\n';
+        for (const s of (parsed.shifts || [])) {
+            const d = new Date(s.date + 'T00:00:00');
+            const day = dayNames[d.getDay()];
+            msg += `  📅 ${d.getMonth() + 1}/${d.getDate()}(${day}) ${s.start_time}〜${s.end_time}\n`;
+        }
+    } else if (parsed.action === 'dayoff') {
+        msg += '【お休み希望】\n';
+        for (const date of (parsed.dates || [])) {
+            const d = new Date(date + 'T00:00:00');
+            const day = dayNames[d.getDay()];
+            msg += `  🚫 ${d.getMonth() + 1}/${d.getDate()}(${day}) お休み\n`;
+        }
+    }
+
+    msg += '\n━━━━━━━━━━━━━━━━\n';
+    msg += '✅「OK」で登録\n';
+    msg += '❌「キャンセル」で取消\n';
+    msg += '━━━━━━━━━━━━━━━━';
+
+    return msg;
+}
+
+// ============================================================
+// Handle confirmation response
+// ============================================================
+async function handleConfirmationResponse(userId, message) {
+    const lowerMsg = message.toLowerCase();
+    const pending = pendingConfirmations.get(userId);
+
+    // Check if expired
+    if (Date.now() > pending.expiresAt) {
+        pendingConfirmations.delete(userId);
+        await sendMessage(userId, '⏰ 確認の有効期限が切れました。もう一度メッセージを送信してください。');
+        return;
+    }
+
+    // Cancel
+    const cancelKeywords = ['キャンセル', 'きゃんせる', 'cancel', 'いいえ', 'いえ', 'no', 'やめる', 'やめて', '取消', '中止'];
+    if (cancelKeywords.some(k => lowerMsg.includes(k))) {
+        pendingConfirmations.delete(userId);
+        await sendMessage(userId, '❌ 登録をキャンセルしました。');
+        return;
+    }
+
+    // Confirm
+    const confirmKeywords = ['ok', 'おk', 'はい', 'うん', 'いい', 'お願い', 'おねがい', '登録', 'yes', '確定', 'おっけー', 'オッケー', 'OK'];
+    if (confirmKeywords.some(k => lowerMsg.includes(k))) {
+        pendingConfirmations.delete(userId);
+
+        let replyText = '';
+        try {
+            if (pending.parsed.action === 'register') {
+                replyText = await handleRegisterShifts(pending.staff, pending.parsed);
+            } else if (pending.parsed.action === 'dayoff') {
+                replyText = await handleDayOff(pending.staff, pending.parsed);
+            }
+        } catch (e) {
+            console.error('Registration error:', e);
+            replyText = '⚠️ 登録処理中にエラーが発生しました。もう一度お試しください。';
+        }
+
+        await sendMessage(userId, replyText);
+        return;
+    }
+
+    // Unknown response - remind to confirm or cancel
+    await sendMessage(userId, '確認待ちです。\n✅「OK」で登録\n❌「キャンセル」で取消');
+}
+
+// ============================================================
 // Staff lookup
 // ============================================================
 async function findStaffByLineWorksId(lineWorksUserId) {
-    // First try to find by lineworks_id column
     let staff = await queryOne(
         'SELECT * FROM staff WHERE lineworks_id = $1 AND org_id = $2 AND is_active = 1',
         [lineWorksUserId, ORG_ID]
     );
 
     if (!staff) {
-        // If not found, return a stub with the LINE WORKS user ID
-        // Admin will need to link the staff member
         console.log(`⚠️ No staff linked for LINE WORKS user: ${lineWorksUserId}`);
         return { id: null, name: lineWorksUserId, lineworks_id: lineWorksUserId };
     }
@@ -99,21 +260,15 @@ async function findStaffByLineWorksId(lineWorksUserId) {
  * Register shift requests
  */
 async function handleRegisterShifts(staff, parsed) {
-    if (!staff.id) {
-        return `⚠️ あなたのLINE WORKSアカウントはまだスタッフに紐付けされていません。\n管理者に連絡してください。\nユーザーID: ${staff.lineworks_id}`;
-    }
-
     const shifts = parsed.shifts || [];
-    if (!shifts.length) {
-        return '⚠️ シフト情報が見つかりませんでした。';
-    }
+    if (!shifts.length) return '⚠️ シフト情報が見つかりませんでした。';
 
     let registered = 0;
     let errors = [];
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
 
     for (const shift of shifts) {
         try {
-            // Upsert into shift_requests
             const existing = await queryOne(
                 'SELECT id FROM shift_requests WHERE staff_id = $1 AND date = $2',
                 [staff.id, shift.date]
@@ -139,10 +294,14 @@ async function handleRegisterShifts(staff, parsed) {
         }
     }
 
-    let reply = `✅ ${staff.name}さんのシフト希望を${registered}件登録しました\n\n`;
-    reply += parsed.message || '';
+    let reply = `✅ ${staff.name}さんのシフト希望を${registered}件登録しました！\n\n`;
+    for (const shift of shifts) {
+        const d = new Date(shift.date + 'T00:00:00');
+        const day = dayNames[d.getDay()];
+        reply += `  📅 ${d.getMonth() + 1}/${d.getDate()}(${day}) ${shift.start_time}〜${shift.end_time}\n`;
+    }
     if (errors.length) {
-        reply += `\n\n⚠️ ${errors.join(', ')} の登録でエラーが発生しました`;
+        reply += `\n⚠️ ${errors.join(', ')} の登録でエラーが発生しました`;
     }
 
     return reply;
@@ -152,12 +311,9 @@ async function handleRegisterShifts(staff, parsed) {
  * Register day-off requests
  */
 async function handleDayOff(staff, parsed) {
-    if (!staff.id) {
-        return `⚠️ あなたのLINE WORKSアカウントはまだスタッフに紐付けされていません。\n管理者に連絡してください。`;
-    }
-
     const dates = parsed.dates || [];
     let registered = 0;
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
 
     for (const date of dates) {
         try {
@@ -185,7 +341,14 @@ async function handleDayOff(staff, parsed) {
         }
     }
 
-    return `✅ ${staff.name}さんの休み希望を${registered}件登録しました\n\n${parsed.message || ''}`;
+    let reply = `✅ ${staff.name}さんの休み希望を${registered}件登録しました！\n\n`;
+    for (const date of dates) {
+        const d = new Date(date + 'T00:00:00');
+        const day = dayNames[d.getDay()];
+        reply += `  🚫 ${d.getMonth() + 1}/${d.getDate()}(${day}) お休み\n`;
+    }
+
+    return reply;
 }
 
 /**
@@ -193,19 +356,17 @@ async function handleDayOff(staff, parsed) {
  */
 async function handleCheckShifts(staff, parsed) {
     if (!staff.id) {
-        return `⚠️ あなたのLINE WORKSアカウントはまだスタッフに紐付けされていません。`;
+        return '⚠️ あなたのLINE WORKSアカウントはまだスタッフに紐付けされていません。';
     }
 
     const year = parsed.year || new Date().getFullYear();
     const month = parsed.month || (new Date().getMonth() + 1);
 
-    // Get shift requests
     const requests = await queryAll(
         'SELECT * FROM shift_requests WHERE staff_id = $1 AND year = $2 AND month = $3 ORDER BY date',
         [staff.id, year, month]
     );
 
-    // Get confirmed shifts
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
     const shifts = await queryAll(
@@ -221,7 +382,7 @@ async function handleCheckShifts(staff, parsed) {
         for (const s of shifts) {
             const d = new Date(s.date);
             const day = dayNames[d.getDay()];
-            reply += `  ${d.getMonth() + 1}/${d.getDate()}(${day}) ${s.start_time || '?'}〜${s.end_time || '?'}\n`;
+            reply += `  📅 ${d.getMonth() + 1}/${d.getDate()}(${day}) ${s.start_time || '?'}〜${s.end_time || '?'}\n`;
         }
         reply += '\n';
     }
@@ -232,15 +393,15 @@ async function handleCheckShifts(staff, parsed) {
             const d = new Date(r.date);
             const day = dayNames[d.getDay()];
             if (r.is_available) {
-                reply += `  ${d.getMonth() + 1}/${d.getDate()}(${day}) ${r.start_time || '?'}〜${r.end_time || '?'}\n`;
+                reply += `  📅 ${d.getMonth() + 1}/${d.getDate()}(${day}) ${r.start_time || '?'}〜${r.end_time || '?'}\n`;
             } else {
-                reply += `  ${d.getMonth() + 1}/${d.getDate()}(${day}) 休み\n`;
+                reply += `  🚫 ${d.getMonth() + 1}/${d.getDate()}(${day}) 休み\n`;
             }
         }
     }
 
     if (!shifts.length && !requests.length) {
-        reply += 'まだシフト情報がありません。';
+        reply += 'まだシフト情報がありません。\n\nシフト希望を送信するには「ヘルプ」と入力してください。';
     }
 
     return reply;
@@ -254,6 +415,7 @@ router.get('/lineworks/status', (req, res) => {
         configured: isConfigured(),
         gemini_configured: !!process.env.GEMINI_API_KEY,
         bot_id: process.env.LINEWORKS_BOT_ID ? '***' + process.env.LINEWORKS_BOT_ID.slice(-4) : null,
+        pending_confirmations: pendingConfirmations.size,
     });
 });
 
