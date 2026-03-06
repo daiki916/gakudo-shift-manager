@@ -2,6 +2,7 @@
  * LINE WORKS API v2 authentication using Service Account (JWT)
  */
 const https = require('https');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 let cachedToken = null;
@@ -10,22 +11,27 @@ let tokenExpiresAt = 0;
 /**
  * Get private key from environment variable.
  * Priority: LINEWORKS_PRIVATE_KEY_BASE64 (base64 encoded) > LINEWORKS_PRIVATE_KEY (raw)
+ * Returns a crypto.KeyObject for jsonwebtoken v9+ compatibility.
  */
 function getPrivateKey() {
+    let pem;
+
     const b64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64;
     if (b64) {
-        const decoded = Buffer.from(b64, 'base64').toString('utf8');
-        console.log('🔑 Private key loaded from base64 env var, length:', decoded.length);
-        return decoded;
+        pem = Buffer.from(b64, 'base64').toString('utf8');
+        console.log('🔑 Private key loaded from base64 env var, length:', pem.length);
+    } else {
+        const raw = process.env.LINEWORKS_PRIVATE_KEY;
+        if (raw) {
+            pem = raw.replace(/\\n/g, '\n');
+            console.log('🔑 Private key loaded from raw env var (fallback)');
+        } else {
+            throw new Error('No private key configured (set LINEWORKS_PRIVATE_KEY_BASE64 or LINEWORKS_PRIVATE_KEY)');
+        }
     }
 
-    const raw = process.env.LINEWORKS_PRIVATE_KEY;
-    if (raw) {
-        console.log('🔑 Private key loaded from raw env var (fallback)');
-        return raw.replace(/\\n/g, '\n');
-    }
-
-    throw new Error('No private key configured (set LINEWORKS_PRIVATE_KEY_BASE64 or LINEWORKS_PRIVATE_KEY)');
+    console.log('🔑 Key starts with:', pem.substring(0, 27));
+    return crypto.createPrivateKey(pem);
 }
 
 /**
