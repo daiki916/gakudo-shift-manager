@@ -353,12 +353,14 @@ router.get('/cost-simulation', async (req, res) => {
             }
 
             const totalHours = totalMinutes / 60;
-            let cost = 0;
+            const allowanceTotal = (staff.commute_allowance || 0) + (staff.qualification_allowance || 0) + (staff.other_allowance || 0);
+            let baseCost = 0;
             if (staff.pay_type === 'hourly') {
-                cost = Math.round(totalHours * staff.hourly_rate);
+                baseCost = Math.round(totalHours * staff.hourly_rate);
             } else {
-                cost = staff.monthly_salary;
+                baseCost = staff.monthly_salary;
             }
+            const cost = baseCost + allowanceTotal;
 
             return {
                 staff_id: staff.id,
@@ -367,14 +369,20 @@ router.get('/cost-simulation', async (req, res) => {
                 pay_type: staff.pay_type,
                 hourly_rate: staff.hourly_rate,
                 monthly_salary: staff.monthly_salary,
+                commute_allowance: staff.commute_allowance || 0,
+                qualification_allowance: staff.qualification_allowance || 0,
+                other_allowance: staff.other_allowance || 0,
+                allowance_total: allowanceTotal,
                 total_days: totalDays,
                 total_hours: Math.round(totalHours * 10) / 10,
                 total_minutes: totalMinutes,
+                base_cost: baseCost,
                 cost: cost
             };
         });
 
         const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
+        const totalAllowance = results.reduce((sum, r) => sum + r.allowance_total, 0);
         const hourlyTotal = results.filter(r => r.pay_type === 'hourly').reduce((sum, r) => sum + r.cost, 0);
         const monthlyTotal = results.filter(r => r.pay_type === 'monthly').reduce((sum, r) => sum + r.cost, 0);
 
@@ -384,6 +392,7 @@ router.get('/cost-simulation', async (req, res) => {
             staff: results,
             summary: {
                 total_cost: totalCost,
+                total_allowance: totalAllowance,
                 hourly_staff_cost: hourlyTotal,
                 monthly_staff_cost: monthlyTotal,
                 staff_count: staffList.length,

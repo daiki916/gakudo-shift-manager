@@ -69,6 +69,9 @@
                                 <th>名前</th>
                                 <th>区分</th>
                                 <th>時給・月給</th>
+                                <th>通勤</th>
+                                <th>資格</th>
+                                <th>その他</th>
                                 <th>状態</th>
                                 <th>操作</th>
                             </tr>
@@ -148,6 +151,7 @@
                                 <th>スタッフ名</th>
                                 <th>区分</th>
                                 <th>時給/月給</th>
+                                <th>手当合計</th>
                                 <th>出勤日数</th>
                                 <th>労働時間</th>
                                 <th>人件費</th>
@@ -269,6 +273,25 @@
             <div class="form-group" id="monthly-field" style="display:none">
                 <label class="form-label">月給（円）</label>
                 <input type="number" class="form-input" id="staff-monthly-salary" placeholder="250000">
+            </div>
+            <div style="border-top: 1px solid var(--border); margin: 16px 0 12px; padding-top: 12px;">
+                <label
+                    style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: block;">💰
+                    手当情報</label>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label class="form-label">通勤手当</label>
+                    <input type="number" class="form-input" id="staff-commute" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">資格手当</label>
+                    <input type="number" class="form-input" id="staff-qualification" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">その他手当</label>
+                    <input type="number" class="form-input" id="staff-other-allowance" placeholder="0">
+                </div>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeModal('staff-modal')">キャンセル</button>
@@ -529,7 +552,7 @@
         function renderStaffTable() {
             const tbody = document.getElementById('staff-table-body');
             if (!staffList.length) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 40px;">
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color: var(--text-muted); padding: 40px;">
           スタッフが登録されていません。「＋スタッフ追加」から追加してください。
         </td></tr>`;
                 return;
@@ -547,6 +570,9 @@
           <td style="font-weight:500">${escapeHtml(s.name)}</td>
           <td><span class="badge badge-${s.pay_type}">${s.pay_type === 'hourly' ? '時給' : '月給'}</span></td>
           <td class="numeric">${s.pay_type === 'hourly' ? formatYen(s.hourly_rate) + '/h' : formatYen(s.monthly_salary) + '/月'}</td>
+          <td class="numeric" style="font-size:0.85rem">${s.commute_allowance ? formatYen(s.commute_allowance) : '-'}</td>
+          <td class="numeric" style="font-size:0.85rem">${s.qualification_allowance ? formatYen(s.qualification_allowance) : '-'}</td>
+          <td class="numeric" style="font-size:0.85rem">${s.other_allowance ? formatYen(s.other_allowance) : '-'}</td>
           <td>${s.is_active ? '🟢 有効' : '⚪ 無効'}</td>
           <td>
             <div class="btn-group">
@@ -566,6 +592,9 @@
             document.getElementById('staff-pay-type').value = 'hourly';
             document.getElementById('staff-hourly-rate').value = '';
             document.getElementById('staff-monthly-salary').value = '';
+            document.getElementById('staff-commute').value = '';
+            document.getElementById('staff-qualification').value = '';
+            document.getElementById('staff-other-allowance').value = '';
             togglePayFields();
             openModal('staff-modal');
         }
@@ -580,6 +609,9 @@
             document.getElementById('staff-pay-type').value = s.pay_type;
             document.getElementById('staff-hourly-rate').value = s.hourly_rate || '';
             document.getElementById('staff-monthly-salary').value = s.monthly_salary || '';
+            document.getElementById('staff-commute').value = s.commute_allowance || '';
+            document.getElementById('staff-qualification').value = s.qualification_allowance || '';
+            document.getElementById('staff-other-allowance').value = s.other_allowance || '';
             togglePayFields();
             openModal('staff-modal');
         }
@@ -597,6 +629,9 @@
                 pay_type: document.getElementById('staff-pay-type').value,
                 hourly_rate: parseInt(document.getElementById('staff-hourly-rate').value) || 0,
                 monthly_salary: parseInt(document.getElementById('staff-monthly-salary').value) || 0,
+                commute_allowance: parseInt(document.getElementById('staff-commute').value) || 0,
+                qualification_allowance: parseInt(document.getElementById('staff-qualification').value) || 0,
+                other_allowance: parseInt(document.getElementById('staff-other-allowance').value) || 0,
                 club_id: parseInt(document.getElementById('staff-club-id').value) || 1,
             };
 
@@ -1180,23 +1215,28 @@
             if (!costData) return;
             const tbody = document.getElementById('cost-table-body');
             if (!costData.staff.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:40px;">データがありません</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px;">データがありません</td></tr>';
                 return;
             }
 
             let totalCost = 0;
+            let totalAllowance = 0;
             tbody.innerHTML = costData.staff.map(s => {
                 totalCost += s.cost;
+                totalAllowance += (s.allowance_total || 0);
                 return `<tr>
           <td style="font-weight:500">${escapeHtml(s.staff_name)}</td>
           <td><span class="badge badge-${s.pay_type}">${s.pay_type === 'hourly' ? '時給' : '月給'}</span></td>
           <td class="numeric">${s.pay_type === 'hourly' ? formatYen(s.hourly_rate) + '/h' : formatYen(s.monthly_salary)}</td>
+          <td class="numeric" style="color: var(--accent-300); font-size:0.9rem;">${s.allowance_total ? formatYen(s.allowance_total) : '-'}</td>
           <td class="numeric">${s.total_days}日</td>
           <td class="numeric">${s.total_hours}h</td>
           <td class="numeric" style="font-weight:600; color: var(--primary-300);">${formatYen(s.cost)}</td>
         </tr>`;
             }).join('') + `<tr style="background: var(--surface-glass); font-weight: 700;">
-        <td colspan="5" style="text-align:right;">合計</td>
+        <td colspan="3" style="text-align:right;">合計</td>
+        <td class="numeric" style="color: var(--accent-300);">${formatYen(totalAllowance)}</td>
+        <td colspan="2"></td>
         <td class="numeric" style="color: var(--primary-300); font-size: 1.1rem;">${formatYen(totalCost)}</td>
       </tr>`;
         }
