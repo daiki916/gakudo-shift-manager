@@ -3,7 +3,7 @@
  */
 const https = require('https');
 
-const GEMINI_MODEL = 'gemini-2.0-flash-lite';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const SYSTEM_PROMPT = `あなたはシフト管理アシスタントです。スタッフからのメッセージを解析して、シフト情報をJSON形式で返してください。
