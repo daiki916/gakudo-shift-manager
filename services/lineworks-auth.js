@@ -160,6 +160,11 @@ async function getAccessToken() {
 async function sendMessage(userId, text) {
     const token = await getAccessToken();
     const botId = process.env.LINEWORKS_BOT_ID;
+    console.log('📤 Sending LINE WORKS message:', {
+        userId,
+        length: text.length,
+        preview: text.slice(0, 60),
+    });
 
     const body = JSON.stringify({
         content: {
@@ -183,6 +188,10 @@ async function sendMessage(userId, text) {
             res.on('data', chunk => data += chunk);
             res.on('end', () => {
                 if (res.statusCode >= 200 && res.statusCode < 300) {
+                    console.log('✅ LINE WORKS message sent:', {
+                        userId,
+                        statusCode: res.statusCode,
+                    });
                     resolve(true);
                 } else {
                     console.error('Send message error:', res.statusCode, data);
