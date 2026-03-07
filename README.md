@@ -84,3 +84,7 @@ gakudo-shift-manager/
 ├── package.json
 └── README.md
 ```
+
+## 🤖 BOT 運用
+
+LINE WORKS BOT の構築・秘密鍵設定・スタッフ紐付け・障害対応は [LINEWORKS_BOT_RUNBOOK.md](./LINEWORKS_BOT_RUNBOOK.md) を参照してください。
