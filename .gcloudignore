@@ -1,0 +1,10 @@
+# .gcloudignore
+.gcloudignore
+.git
+.gitignore
+node_modules/
+*.xlsx
+~$*
+.env
+.env.local
+.env.local.example

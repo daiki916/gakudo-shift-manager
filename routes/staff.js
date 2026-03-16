@@ -1,6 +1,97 @@
 const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, runSQL, insertReturningId, ORG_ID } = require('../database');
+const { getOrgMembers } = require('../services/lineworks-auth');
+
+// Get LINE WORKS members list
+router.get('/lineworks-members', async (req, res) => {
+    try {
+        const members = await getOrgMembers();
+        res.json(members.map(m => ({
+            userId: m.userId,
+            name: `${m.userName?.lastName || ''} ${m.userName?.firstName || ''}`.trim(),
+            lastName: m.userName?.lastName || '',
+            firstName: m.userName?.firstName || '',
+            email: m.email || '',
+        })));
+    } catch (err) {
+        console.error('Failed to get LINE WORKS members:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Bulk link LINE WORKS IDs with staff (auto-match by name)
+router.post('/staff/bulk-link-lineworks', async (req, res) => {
+    try {
+        // Get LINE WORKS members
+        let lwMembers;
+        try {
+            lwMembers = await getOrgMembers();
+        } catch (err) {
+            return res.status(500).json({ error: 'LINE WORKSメンバーの取得に失敗: ' + err.message });
+        }
+
+        // Get all staff
+        const allStaff = await queryAll('SELECT id, name, lineworks_id FROM staff WHERE org_id = $1 AND is_active = 1', [ORG_ID]);
+
+        const results = { linked: [], already_linked: [], no_match: [], multiple_match: [] };
+
+        for (const member of lwMembers) {
+            const lastName = (member.userName?.lastName || '').trim();
+            const firstName = (member.userName?.firstName || '').trim();
+            const fullName = `${lastName} ${firstName}`.trim();
+            const userId = member.userId;
+
+            if (!lastName) continue;
+
+            // Find matching staff
+            const matches = allStaff.filter(s => {
+                const staffName = s.name.replace(/\s+/g, ' ').trim();
+                const staffParts = staffName.split(/\s+/);
+                // Full name match
+                if (staffName === fullName) return true;
+                // Last name + first name match
+                if (staffParts[0] === lastName && (staffParts.slice(1).join(' ') === firstName || !firstName)) return true;
+                // Last name only match (if unique)
+                if (staffParts[0] === lastName) return true;
+                return false;
+            });
+
+            if (matches.length === 0) {
+                results.no_match.push({ userId, name: fullName });
+            } else if (matches.length > 1) {
+                // Narrow down with full name match
+                const exactMatch = matches.find(s => s.name.replace(/\s+/g, ' ').trim() === fullName);
+                if (exactMatch) {
+                    if (exactMatch.lineworks_id === userId) {
+                        results.already_linked.push({ userId, name: fullName, staff_id: exactMatch.id, staff_name: exactMatch.name });
+                    } else {
+                        await runSQL('UPDATE staff SET lineworks_id = $1 WHERE id = $2', [userId, exactMatch.id]);
+                        results.linked.push({ userId, name: fullName, staff_id: exactMatch.id, staff_name: exactMatch.name });
+                    }
+                } else {
+                    results.multiple_match.push({ userId, name: fullName, candidates: matches.map(s => ({ id: s.id, name: s.name })) });
+                }
+            } else {
+                const staff = matches[0];
+                if (staff.lineworks_id === userId) {
+                    results.already_linked.push({ userId, name: fullName, staff_id: staff.id, staff_name: staff.name });
+                } else {
+                    await runSQL('UPDATE staff SET lineworks_id = $1 WHERE id = $2', [userId, staff.id]);
+                    results.linked.push({ userId, name: fullName, staff_id: staff.id, staff_name: staff.name });
+                }
+            }
+        }
+
+        res.json({
+            message: `${results.linked.length}件紐づけ完了、${results.already_linked.length}件紐づけ済み、${results.no_match.length}件マッチなし、${results.multiple_match.length}件複数候補`,
+            ...results,
+        });
+    } catch (err) {
+        console.error('Bulk link error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Get all clubs
 router.get('/clubs', async (req, res) => {
@@ -13,7 +104,7 @@ router.get('/clubs', async (req, res) => {
     }
 });
 
-// Verify admin password
+// Verify admin password (master admin)
 router.post('/admin/verify', async (req, res) => {
     try {
         const org = await queryOne('SELECT * FROM organizations WHERE id = $1', [ORG_ID]);
@@ -23,10 +114,57 @@ router.post('/admin/verify', async (req, res) => {
         if (org.admin_password && org.admin_password !== password) {
             return res.status(401).json({ error: 'パスワードが正しくありません' });
         }
-        res.json({ success: true });
+        res.json({ success: true, role: 'admin', club_id: null });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'エラーが発生しました' });
+    }
+});
+
+// Club login (ID + password)
+router.post('/club/login', async (req, res) => {
+    try {
+        const { login_id, password } = req.body;
+        if (!login_id || !password) {
+            return res.status(400).json({ error: 'IDとパスワードを入力してください' });
+        }
+
+        // Check master admin first (login_id: admin)
+        if (login_id === 'admin') {
+            const org = await queryOne('SELECT * FROM organizations WHERE id = $1', [ORG_ID]);
+            if (org && (!org.admin_password || org.admin_password === password)) {
+                return res.json({ success: true, role: 'admin', club_id: null, club_name: 'マスター管理者' });
+            }
+            return res.status(401).json({ error: 'パスワードが正しくありません' });
+        }
+
+        // Check club accounts
+        const club = await queryOne('SELECT * FROM clubs WHERE login_id = $1', [login_id]);
+        if (!club) {
+            return res.status(401).json({ error: 'IDが見つかりません' });
+        }
+        if (club.password !== password) {
+            return res.status(401).json({ error: 'パスワードが正しくありません' });
+        }
+
+        res.json({ success: true, role: 'club', club_id: club.id, club_name: club.name });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'ログインに失敗しました' });
+    }
+});
+
+// Get all accounts (for admin)
+router.get('/accounts', async (req, res) => {
+    try {
+        const clubs = await queryAll('SELECT id, name, login_id, password FROM clubs ORDER BY display_order');
+        res.json({
+            master: { login_id: 'admin', password: '', role: 'admin' },
+            clubs: clubs.map(c => ({ id: c.id, name: c.name, login_id: c.login_id, password: c.password, role: 'club' })),
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'アカウント一覧の取得に失敗しました' });
     }
 });
 

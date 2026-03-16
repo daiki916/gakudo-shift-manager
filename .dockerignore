@@ -1,0 +1,10 @@
+node_modules
+.git
+.gitignore
+data
+.env
+.env.*
+README.md
+LINEWORKS_BOT_RUNBOOK.md
+render.yaml
+_archive

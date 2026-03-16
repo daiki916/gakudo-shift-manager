@@ -5,12 +5,14 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "sync:freee-bot-menu": "node scripts/sync-freee-bot-menu.js"
     },
     "engines": {
         "node": "20.x"
     },
     "dependencies": {
+        "exceljs": "^4.4.0",
         "express": "^4.21.0",
         "jsonwebtoken": "^9.0.2",
         "pg": "^8.13.0"

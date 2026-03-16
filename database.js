@@ -41,9 +41,15 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS clubs (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
-        display_order INTEGER DEFAULT 0
+        display_order INTEGER DEFAULT 0,
+        login_id TEXT UNIQUE,
+        password TEXT DEFAULT ''
       )
     `);
+
+    // Add login columns to existing clubs table
+    try { await client.query('ALTER TABLE clubs ADD COLUMN IF NOT EXISTS login_id TEXT UNIQUE'); } catch (e) { }
+    try { await client.query('ALTER TABLE clubs ADD COLUMN IF NOT EXISTS password TEXT DEFAULT \'\''); } catch (e) { }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS staff (
@@ -143,11 +149,28 @@ async function initDB() {
       );
     }
 
-    // Seed 6 clubs
-    for (let i = 1; i <= 6; i++) {
-      const clubResult = await client.query('SELECT * FROM clubs WHERE id = $1', [i]);
+    // Seed 6 clubs with login credentials
+    const clubAccounts = [
+      { id: 1, name: 'クラブ1', login_id: 'club1', password: 'niko2025c1' },
+      { id: 2, name: 'クラブ2', login_id: 'club2', password: 'niko2025c2' },
+      { id: 3, name: 'クラブ3', login_id: 'club3', password: 'niko2025c3' },
+      { id: 4, name: 'クラブ4', login_id: 'club4', password: 'niko2025c4' },
+      { id: 5, name: 'クラブ5', login_id: 'club5', password: 'niko2025c5' },
+      { id: 6, name: 'クラブ6', login_id: 'club6', password: 'niko2025c6' },
+    ];
+    for (const club of clubAccounts) {
+      const clubResult = await client.query('SELECT * FROM clubs WHERE id = $1', [club.id]);
       if (clubResult.rows.length === 0) {
-        await client.query('INSERT INTO clubs (id, name, display_order) VALUES ($1, $2, $3)', [i, `クラブ${i}`, i]);
+        await client.query(
+          'INSERT INTO clubs (id, name, display_order, login_id, password) VALUES ($1, $2, $3, $4, $5)',
+          [club.id, club.name, club.id, club.login_id, club.password]
+        );
+      } else {
+        // Update existing clubs with login credentials if not set
+        await client.query(
+          'UPDATE clubs SET login_id = $1, password = $2 WHERE id = $3 AND (login_id IS NULL OR login_id = \'\')',
+          [club.login_id, club.password, club.id]
+        );
       }
     }
   } finally {

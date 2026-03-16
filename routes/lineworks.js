@@ -476,7 +476,6 @@ router.get('/lineworks/debug', async (req, res) => {
             const b64Body = pem.replace(/-----BEGIN .*-----/, '').replace(/-----END .*-----/, '').replace(/\s/g, '');
             derBuffer = Buffer.from(b64Body, 'base64');
 
-            const rawB64 = process.env.LINEWORKS_PRIVATE_KEY_BASE64 || '';
             results.jwt_sign = {
                 key_source: keySource,
                 pem_length: pem.length,
@@ -486,19 +485,14 @@ router.get('/lineworks/debug', async (req, res) => {
                 b64_body_length: b64Body.length,
                 der_bytes: derBuffer.length,
                 der_first_bytes: derBuffer.slice(0, 10).toString('hex'),
-                raw_b64_first20: rawB64.substring(0, 20),
-                raw_b64_last20: rawB64.substring(rawB64.length - 20),
                 node_version: process.version,
                 openssl_version: process.versions.openssl,
             };
         } else if (derBuffer) {
-            const rawDerB64 = process.env.LINEWORKS_PRIVATE_KEY_DER || '';
             results.jwt_sign = {
                 key_source: keySource,
                 der_bytes: derBuffer.length,
                 der_first_bytes: derBuffer.slice(0, 10).toString('hex'),
-                raw_der_b64_first20: rawDerB64.substring(0, 20),
-                raw_der_b64_last20: rawDerB64.substring(rawDerB64.length - 20),
                 node_version: process.version,
                 openssl_version: process.versions.openssl,
             };
@@ -537,7 +531,7 @@ router.get('/lineworks/debug', async (req, res) => {
     // Test access token acquisition
     try {
         const token = await getAccessToken();
-        results.access_token = { success: true, token_preview: token ? token.substring(0, 10) + '...' : null };
+        results.access_token = { success: true, token_present: !!token };
     } catch (err) {
         results.access_token = { success: false, error: err.message };
     }

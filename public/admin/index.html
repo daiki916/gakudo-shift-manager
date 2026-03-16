@@ -9,7 +9,36 @@
 </head>
 
 <body>
-    <div class="app-container wide">
+    <!-- ============ Login Screen ============ -->
+    <div id="login-screen"
+        style="position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%); font-family: 'Segoe UI', sans-serif;">
+        <div
+            style="background: rgba(30,41,59,0.95); border: 1px solid rgba(148,163,184,0.15); border-radius: 20px; padding: 40px 36px; width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center;">
+            <div style="font-size: 2.5rem; margin-bottom: 8px;">📋</div>
+            <h1 style="color: #f1f5f9; font-size: 1.3rem; margin: 0 0 4px;">シフト管理システム</h1>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 28px;">にこにこおひさまクラブ</p>
+            <div style="text-align: left;">
+                <label
+                    style="display:block; color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px; font-weight: 600;">ログインID</label>
+                <input id="login-id" type="text" placeholder="例: club1" autocomplete="username"
+                    style="width:100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.2); background: rgba(15,23,42,0.8); color: #f1f5f9; font-size: 0.95rem; margin-bottom: 16px; box-sizing: border-box; outline: none; transition: border 0.2s;"
+                    onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='rgba(148,163,184,0.2)'">
+                <label
+                    style="display:block; color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px; font-weight: 600;">パスワード</label>
+                <input id="login-password" type="password" placeholder="パスワードを入力" autocomplete="current-password"
+                    style="width:100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.2); background: rgba(15,23,42,0.8); color: #f1f5f9; font-size: 0.95rem; margin-bottom: 8px; box-sizing: border-box; outline: none; transition: border 0.2s;"
+                    onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='rgba(148,163,184,0.2)'"
+                    onkeydown="if(event.key==='Enter') doLogin()">
+                <p id="login-error" style="color: #ef4444; font-size: 0.8rem; margin: 0 0 12px; min-height: 1.2em;"></p>
+                <button onclick="doLogin()"
+                    style="width:100%; padding: 13px; border-radius: 10px; border: none; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;"
+                    onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 20px rgba(59,130,246,0.4)'"
+                    onmouseout="this.style.transform=''; this.style.boxShadow=''">ログイン</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container wide" id="app-main" style="display:none;">
         <!-- Header -->
         <header class="app-header" id="app-header">
             <div class="app-logo">
@@ -30,6 +59,11 @@
                     <li><a href="#cost" data-tab="cost" onclick="switchTab('cost')">💰 人件費</a></li>
                     <li><a href="#share" data-tab="share" onclick="switchTab('share')">🔗 共有</a></li>
                 </ul>
+                <button onclick="logout()"
+                    style="margin-left: 16px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 0.8rem; cursor: pointer; transition: all 0.2s;"
+                    onmouseover="this.style.background='var(--danger)'; this.style.color='#fff'; this.style.borderColor='var(--danger)'"
+                    onmouseout="this.style.background='transparent'; this.style.color='var(--text-secondary)'; this.style.borderColor='var(--border)'">🚪
+                    ログアウト</button>
             </nav>
         </header>
 
@@ -461,25 +495,99 @@
         // ============================================================
         // Init
         // ============================================================
-        document.addEventListener('DOMContentLoaded', async () => {
+        // ============================================================
+        // Login
+        // ============================================================
+        let currentUser = null; // { role, club_id, club_name }
+
+        async function doLogin() {
+            const loginId = document.getElementById('login-id').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            errorEl.textContent = '';
+
+            if (!loginId) { errorEl.textContent = 'IDを入力してください'; return; }
+
+            try {
+                const res = await fetch('/api/club/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login_id: loginId, password })
+                });
+                const data = await res.json();
+                if (!res.ok) { errorEl.textContent = data.error || 'ログインに失敗しました'; return; }
+
+                currentUser = data;
+                sessionStorage.setItem('loginUser', JSON.stringify(data));
+                applyLoginState();
+            } catch {
+                errorEl.textContent = '通信エラーが発生しました';
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('loginUser');
+            currentUser = null;
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('app-main').style.display = 'none';
+            document.getElementById('login-id').value = '';
+            document.getElementById('login-password').value = '';
+        }
+
+        function applyLoginState() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-main').style.display = '';
+
+            // If club user, auto-select their club
+            if (currentUser.role === 'club' && currentUser.club_id) {
+                selectedClubId = currentUser.club_id;
+                const filter = document.getElementById('club-filter');
+                if (filter) { filter.value = currentUser.club_id; filter.disabled = true; }
+            } else {
+                const filter = document.getElementById('club-filter');
+                if (filter) filter.disabled = false;
+            }
+
+            // Update header with user info
+            const badge = document.getElementById('org-name-badge');
+            if (badge) badge.textContent = currentUser.club_name || 'にこにこおひさまクラブ';
+
+            initApp();
+        }
+
+        async function initApp() {
             try {
                 const clubRes = await fetch('/api/clubs');
                 clubList = await clubRes.json();
                 orgName = 'にこにこおひさまクラブ';
-                document.getElementById('org-name-badge').textContent = orgName;
                 document.title = `${orgName} - シフト管理`;
                 populateClubSelects();
-            } catch {
-                console.error('Failed to load clubs');
-            }
+                if (currentUser?.role === 'club' && currentUser.club_id) {
+                    const filter = document.getElementById('club-filter');
+                    if (filter) { filter.value = currentUser.club_id; filter.disabled = true; }
+                }
+            } catch { console.error('Failed to load clubs'); }
 
             await loadStaff();
             updateMonthDisplays();
             loadDashboard();
 
-            // Check hash for initial tab
             const hash = window.location.hash.replace('#', '');
             if (hash) switchTab(hash);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check for saved session
+            const saved = sessionStorage.getItem('loginUser');
+            if (saved) {
+                try {
+                    currentUser = JSON.parse(saved);
+                    applyLoginState();
+                    return;
+                } catch { sessionStorage.removeItem('loginUser'); }
+            }
+            // Show login screen
+            document.getElementById('login-screen').style.display = 'flex';
         });
 
         function populateClubSelects() {
